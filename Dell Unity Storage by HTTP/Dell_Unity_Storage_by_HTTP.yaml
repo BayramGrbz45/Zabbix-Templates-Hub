@@ -1,0 +1,4546 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: e960332b3f6c46a1956486d4f3f99fce
+      name: 'Templates/Server hardware'
+  templates:
+    - uuid: c46a07e485a8408ea7d0ff3bb7ab3989
+      template: 'Dell Unity Storage by HTTP'
+      name: 'Dell Unity Storage by HTTP'
+      description: |
+        Enterprise monitoring template for Dell Unity / UnityXT hybrid and all-flash storage arrays via the Unisphere REST API.
+        
+        Coverage: system health, hardware FRUs (SP, DPE/DAE enclosures, disks, batteries, fans, power supplies, FC ports, Ethernet ports), block storage (pools, LUNs, oversubscription), file storage (filesystems, CIFS shares, CIFS server config, NAS server health/failover), replication session health, array-wide capacity, real-time performance (SP CPU, IOPS, bandwidth, latency), and severity-classified system alerts.
+        
+        Requires an Operator (or higher) local/LDAP account. Configure {$DELL_UNITY.HOSTNAME}, {$DELL_UNITY.USERNAME}, {$DELL_UNITY.PASSWORD} on the host. All discoverable components use LLD, so the template self-adjusts to the array's actual configuration (block-only, file-only, or unified).
+        
+        Note: the real-time performance item (unity.perf.get) uses a Script item that calls the Unity real-time metrics API (metric / metricRealTimeQuery). It discovers metric paths dynamically from the array's own metric catalog rather than hard-coding them, but it has not been validated against a live array by the template author — verify it in your environment and adjust the keyword filters in the script if needed.
+      groups:
+        - name: 'Templates/Server hardware'
+      items:
+        - uuid: d4a18f8ef253470faed740b5e6714390
+          name: 'Dell Unity System Alert'
+          type: HTTP_AGENT
+          key: unity.alert.get
+          delay: 5m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects active system alerts including severity, timestamp, description, affected component and acknowledgement state. Feeds the Alert Discovery rule which raises per-alert problems classified by severity.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/alert/instances'
+          query_fields:
+            - name: fields
+              value: 'severity,timestamp,description,component,messageId,isAcknowledged'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: availability
+            - tag: component
+              value: alert
+          triggers:
+            - uuid: 14ea9864612a4b50969ad8594cb47f54
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.alert.get,30m)=1'
+              name: 'Dell Unity: Failed fetching alerts data'
+              priority: HIGH
+        - uuid: ae8410a778e74fb2961108e5c4bcce3e
+          name: 'Dell Unity Battery Metrics'
+          type: HTTP_AGENT
+          key: unity.battery.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects battery backup unit (BBU) data including health status, replacement needs, firmware versions, and serial numbers. Used by Battery Discovery rule to identify and monitor individual batteries.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/battery/instances'
+          query_fields:
+            - name: fields
+              value: 'health,needsReplacement,slotNumber,name,manufacturer,model,firmwareVersion,emcPartNumber,emcSerialNumber,vendorPartNumber,vendorSerialNumber'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: hardware
+            - tag: component
+              value: battery
+          triggers:
+            - uuid: 4a2b59b4e478459e9d8af0e69e798c9d
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.battery.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching backup batteries data'
+              priority: HIGH
+        - uuid: 6945622e0f5644c8b9cc37fa59396819
+          name: 'Dell Unity CIFS/SMB Share Metrics'
+          type: HTTP_AGENT
+          key: unity.cifs_share.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects CIFS/SMB share configuration and status data including share type, filesystem mapping, read-only and snapshot state. Data source for CIFS/SMB Share Discovery.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/cifsShare/instances'
+          query_fields:
+            - name: fields
+              value: 'type,filesystem,snap,isReadOnly,name,creationTime,modifiedTime'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: application
+            - tag: component
+              value: cifs
+          triggers:
+            - uuid: 0117f8b5ec0c4243ada8354b799088ac
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.cifs_share.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching CIFS/SMB shares data'
+              priority: HIGH
+        - uuid: 9b30e70d7ebb438e8f238aabcdc64d34
+          name: 'Dell Unity DAE Enclosure Metrics'
+          type: HTTP_AGENT
+          key: unity.dae.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects health and identity data for expansion Disk Array Enclosures (DAE). Returns an empty result set on systems with no expansion shelves; the discovery rule will simply create no items in that case.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/dae/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,emcSerialNumber,emcPartNumber,model,busId'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: hardware
+            - tag: component
+              value: enclosure
+          triggers:
+            - uuid: d0cce9dba316485cbd4ff40ab8c6e5fa
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.dae.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching DAE enclosure data'
+              priority: HIGH
+        - uuid: 512c8a13d4e949c9904f9c0112b779ce
+          name: 'Dell Unity Disk Drive Metrics'
+          type: HTTP_AGENT
+          key: unity.disk.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects physical disk drive metrics including health status, capacity, speed, RAID/tier membership, firmware version, and replacement indicators. Critical for storage capacity planning and disk failure detection.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/disk/instances'
+          query_fields:
+            - name: fields
+              value: 'health,needsReplacement,slotNumber,estimatedEOL,busId,name,manufacturer,model,version,emcPartNumber,emcSerialNumber,tierType,rpm,currentSpeed,maxSpeed,isInUse,isFastCacheInUse,size,rawSize,vendorSize,wwn,diskTechnology,bank,bankSlotNumber,bankSlot'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: hardware
+            - tag: component
+              value: disk
+          triggers:
+            - uuid: 2841b437cd4a4f8db7a2b294c50141ad
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.disk.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching disk drives data'
+              priority: HIGH
+        - uuid: f86e3c3fadb04e4bb1da24d6384d7a6f
+          name: 'Dell Unity DPE Enclosure Metrics'
+          type: HTTP_AGENT
+          key: unity.dpe.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects health and identity data for the base Disk Processor Enclosure(s) (the 2U/3U chassis housing the Storage Processors and first bank of drives).'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/dpe/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,emcSerialNumber,emcPartNumber,model'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: hardware
+            - tag: component
+              value: enclosure
+          triggers:
+            - uuid: 6d8741bf55da4d29bb567bc6b1ab0fca
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.dpe.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching DPE enclosure data'
+              priority: HIGH
+        - uuid: e74ff1f3312d41278ae0dd75f66bd98f
+          name: 'Dell Unity Cooling Fan Metrics'
+          type: HTTP_AGENT
+          key: unity.fan.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects cooling fan health and operational data from storage array. Monitors fan health status to prevent thermal management failures and detect hardware issues early.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/fan/instances'
+          query_fields:
+            - name: fields
+              value: 'health,needsReplacement,name,slotNumber,emcPartNumber,emcSerialNumber,manufacturer,model,vendorSerialNumber,vendorPartNumber'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: hardware
+            - tag: component
+              value: fan
+          triggers:
+            - uuid: 4e1aa79bbf454b26836a8dda220119c8
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.fan.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching cooling fans data'
+              priority: HIGH
+        - uuid: b2d02c7566f747ac9f9e9747816a2b00
+          name: 'Dell Unity Fibre Channel Port Metrics'
+          type: HTTP_AGENT
+          key: unity.fcport.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects Fibre Channel front-end port health, replacement status, and negotiated speed data. Returns an empty result set on systems with no FC I/O modules (e.g. pure iSCSI/SAS-only configurations). Note: unlike ethernetPort, this resource type has no isLinkUp/maxSpeed properties on this array''s API version (confirmed via 422 responses) - link-up state is not currently exposed here, health status is the best available signal.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/fcPort/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,needsReplacement,slotNumber,wwn,currentSpeed'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: network
+            - tag: component
+              value: 'fc port'
+          triggers:
+            - uuid: 71eb7097a39b4e9aaea62340e9aafb35
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.fcport.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching Fibre Channel port data'
+              priority: HIGH
+        - uuid: a89ce55a9a0e4ffb8e5f7ace1251c0ba
+          name: 'Dell Unity File System Metrics'
+          type: HTTP_AGENT
+          key: unity.filesystem.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects filesystem capacity, utilization, and health data. Monitors used/free space, storage format, and filesystem health to trigger capacity and utilization alerts.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/filesystem/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,type,sizeTotal,sizeUsed,isReadOnly,format'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: capacity
+            - tag: component
+              value: filesystem
+          triggers:
+            - uuid: 61aad96241524299a51caac0ef7505d8
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.filesystem.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching file systems data'
+              priority: HIGH
+        - uuid: cabb52866cb3456dab897b2ea2c32f02
+          name: 'Dell Unity Network Interface Metrics'
+          type: HTTP_AGENT
+          key: unity.interfaces.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects Ethernet management/replication network interface configuration and status including link state, speed, MTU, MAC addresses, and health status. Essential for network connectivity monitoring and troubleshooting.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/ethernetPort/instances'
+          query_fields:
+            - name: fields
+              value: 'health,needsReplacement,name,portNumber,speed,mtu,connectorType,bond,isLinkUp,macAddress,isRSSCapable,isRDMACapable'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: network
+            - tag: component
+              value: interface
+          triggers:
+            - uuid: f5e81eb0a40e474e93c3569935024e41
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.interfaces.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching network interfaces data'
+              priority: HIGH
+        - uuid: b0aa1f7a28ec42deaaf645e243f666d2
+          name: 'Dell Unity LUN Metrics'
+          type: HTTP_AGENT
+          key: unity.lun.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects block LUN health, capacity and allocation data. Primary source for block-storage capacity and thin-provisioning monitoring.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/lun/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,sizeTotal,sizeAllocated,pool,wwn'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: capacity
+            - tag: component
+              value: lun
+          triggers:
+            - uuid: 375e3a1960ce4a31bbe5240835686fae
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.lun.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching LUN data'
+              priority: HIGH
+        - uuid: 4c453be6ade44b07b428c4595fb966e5
+          name: 'Dell Unity NAS Server Health Metrics'
+          type: HTTP_AGENT
+          key: unity.nasserver.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects the real NAS Server resource health and current/home Storage Processor ownership, used to detect degraded NAS servers and unplanned SP failover. Field list follows Unity''s documented resource schema; verify via https://<array>/apidocs before relying on it in production.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/nasServer/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,homeSP,currentSP'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: availability
+            - tag: component
+              value: nasserver
+          triggers:
+            - uuid: 3eaeebae7fb04eeba7f5a21bb5142ae2
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.nasserver.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching NAS server health data'
+              priority: HIGH
+        - uuid: f88feb8a38e3428d8f1f46fa67a2a65c
+          name: 'Dell Unity CIFS Server Configuration Metrics'
+          type: HTTP_AGENT
+          key: unity.nas_server.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects CIFS server (SMB service) configuration data: NetBIOS name, domain/workgroup membership, and the owning NAS server. This is the CIFS protocol service configuration, distinct from Dell Unity NAS Server Health Metrics which reports the NAS Server''s own health and SP ownership.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/cifsServer/instances'
+          query_fields:
+            - name: fields
+              value: 'name,netbiosName,domain,lastUsedOrganizationalUnit,workgroup,health,nasServer,fileInterfaces'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: application
+            - tag: component
+              value: cifs
+          triggers:
+            - uuid: bc3cef0761c0428c9bbd2a89dfc871d6
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.nas_server.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching CIFS server configuration data'
+              priority: HIGH
+        - uuid: 09844f172b2a47e3aba298a698bdc605
+          name: 'Storage: Read Bandwidth'
+          type: DEPENDENT
+          key: 'unity.perf.bandwidth[read]'
+          delay: '0'
+          status: DISABLED
+          units: Bps
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[?(@.id==''sys_bw_read'')].value'
+            - type: JSONPATH
+              parameters:
+                - '$[0]'
+          master_item:
+            key: unity.perf.get
+          tags:
+            - tag: component
+              value: performance
+        - uuid: e6aef70febcd41da86d908065c2c0d32
+          name: 'Storage: Total Bandwidth'
+          type: DEPENDENT
+          key: 'unity.perf.bandwidth[total]'
+          delay: '0'
+          status: DISABLED
+          units: Bps
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[?(@.id==''sys_bw_total'')].value'
+            - type: JSONPATH
+              parameters:
+                - '$[0]'
+          master_item:
+            key: unity.perf.get
+          tags:
+            - tag: component
+              value: performance
+        - uuid: 87e02fafb034439cb4f59065a94a3f49
+          name: 'Storage: Write Bandwidth'
+          type: DEPENDENT
+          key: 'unity.perf.bandwidth[write]'
+          delay: '0'
+          status: DISABLED
+          units: Bps
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[?(@.id==''sys_bw_write'')].value'
+            - type: JSONPATH
+              parameters:
+                - '$[0]'
+          master_item:
+            key: unity.perf.get
+          tags:
+            - tag: component
+              value: performance
+        - uuid: 8755413d1a6f416b90adcaaa22166cea
+          name: 'Storage Processor A: CPU Utilization'
+          type: DEPENDENT
+          key: 'unity.perf.cpu[spa]'
+          delay: '0'
+          status: DISABLED
+          units: '%'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[?(@.id==''spa_cpu'')].value'
+            - type: JSONPATH
+              parameters:
+                - '$[0]'
+          master_item:
+            key: unity.perf.get
+          tags:
+            - tag: component
+              value: performance
+          triggers:
+            - uuid: 31b0ed63cea643ed954f3215ccf42065
+              expression: 'avg(/Dell Unity Storage by HTTP/unity.perf.cpu[spa],15m)>{$UNITY.SP.CPU.HIGH}'
+              name: 'Dell Unity: SP A CPU utilization is critical (> {$UNITY.SP.CPU.HIGH}%)'
+              priority: HIGH
+            - uuid: b31e09226cf0434da3413b8df9244fea
+              expression: 'avg(/Dell Unity Storage by HTTP/unity.perf.cpu[spa],15m)>{$UNITY.SP.CPU.AVERAGE}'
+              name: 'Dell Unity: SP A CPU utilization is high (> {$UNITY.SP.CPU.AVERAGE}%)'
+              priority: AVERAGE
+              dependencies:
+                - name: 'Dell Unity: SP A CPU utilization is critical (> {$UNITY.SP.CPU.HIGH}%)'
+                  expression: 'avg(/Dell Unity Storage by HTTP/unity.perf.cpu[spa],15m)>{$UNITY.SP.CPU.HIGH}'
+        - uuid: 3459f0f8035841d0acc4d84b86f36c06
+          name: 'Storage Processor B: CPU Utilization'
+          type: DEPENDENT
+          key: 'unity.perf.cpu[spb]'
+          delay: '0'
+          status: DISABLED
+          units: '%'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[?(@.id==''spb_cpu'')].value'
+            - type: JSONPATH
+              parameters:
+                - '$[0]'
+          master_item:
+            key: unity.perf.get
+          tags:
+            - tag: component
+              value: performance
+          triggers:
+            - uuid: e0a06836c794434e97bd6480c9934045
+              expression: 'avg(/Dell Unity Storage by HTTP/unity.perf.cpu[spb],15m)>{$UNITY.SP.CPU.HIGH}'
+              name: 'Dell Unity: SP B CPU utilization is critical (> {$UNITY.SP.CPU.HIGH}%)'
+              priority: HIGH
+            - uuid: a77deb1c1c5f436bbb87874c41df4dbd
+              expression: 'avg(/Dell Unity Storage by HTTP/unity.perf.cpu[spb],15m)>{$UNITY.SP.CPU.AVERAGE}'
+              name: 'Dell Unity: SP B CPU utilization is high (> {$UNITY.SP.CPU.AVERAGE}%)'
+              priority: AVERAGE
+              dependencies:
+                - name: 'Dell Unity: SP B CPU utilization is critical (> {$UNITY.SP.CPU.HIGH}%)'
+                  expression: 'avg(/Dell Unity Storage by HTTP/unity.perf.cpu[spb],15m)>{$UNITY.SP.CPU.HIGH}'
+        - uuid: 9bc290e64384493e8416314bf71ed138
+          name: 'Dell Unity Real-Time Performance Metrics'
+          type: SCRIPT
+          key: unity.perf.get
+          value_type: TEXT
+          trends: '0'
+          status: DISABLED
+          params: |
+            var host = '{$DELL_UNITY.HOSTNAME}';
+            var user = '{$DELL_UNITY.USERNAME}';
+            var pass = '{$DELL_UNITY.PASSWORD}';
+            var interval = {$UNITY.PERF.QUERY.INTERVAL};
+            
+            function b64encode(str) {
+                var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+                var out = '';
+                var i = 0;
+                while (i < str.length) {
+                    var c1 = str.charCodeAt(i++);
+                    var c2 = str.charCodeAt(i++);
+                    var c3 = str.charCodeAt(i++);
+                    out += chars.charAt(c1 >> 2);
+                    out += chars.charAt(((c1 & 3) << 4) | (isNaN(c2) ? 0 : c2 >> 4));
+                    out += isNaN(c2) ? '=' : chars.charAt(((c2 & 15) << 2) | (isNaN(c3) ? 0 : c3 >> 6));
+                    out += isNaN(c3) ? '=' : chars.charAt(c3 & 63);
+                }
+                return out;
+            }
+            
+            function call(method, path, body) {
+                var req = new HttpRequest();
+                req.addHeader('Authorization: Basic ' + b64encode(user + ':' + pass));
+                req.addHeader('Accept: application/json');
+                req.addHeader('Content-Type: application/json');
+                req.addHeader('X-EMC-REST-CLIENT: true');
+                req.verifyPeer = false;
+                req.verifyHost = false;
+                var url = 'https://' + host + path;
+                var resp = (method === 'GET') ? req.get(url) : (method === 'POST') ? req.post(url, body) : req.delete(url);
+                var status = req.getStatus();
+                if (status < 200 || status >= 300) {
+                    throw 'HTTP ' + status + ' on ' + method + ' ' + path;
+                }
+                return resp ? JSON.parse(resp) : null;
+            }
+            
+            function findValues(obj, key, out) {
+                if (obj === null || typeof obj !== 'object') { return; }
+                for (var k in obj) {
+                    if (k === key) { out.push(obj[k]); }
+                    findValues(obj[k], key, out);
+                }
+            }
+            
+            var catalog = call('GET', '/api/types/metric/instances?fields=path&filter=' + encodeURIComponent('isRealtimeAvailable eq true') + '&per_page=2000');
+            var paths = [];
+            if (catalog && catalog.entries) {
+                for (var i = 0; i < catalog.entries.length; i++) {
+                    paths.push(catalog.entries[i].content.path);
+                }
+            }
+            
+            var cpuMap = {'sp.spa.cpu.utilization': 'spa_cpu', 'sp.spb.cpu.utilization': 'spb_cpu'};
+            var groups = [
+                {id: 'sys_iops_total', suffix: 'storage.summary.iops', agg: 'sum'},
+                {id: 'sys_iops_read', suffix: 'storage.summary.readIops', agg: 'sum'},
+                {id: 'sys_iops_write', suffix: 'storage.summary.writeIops', agg: 'sum'},
+                {id: 'sys_bw_total', suffix: 'storage.summary.bandwidth', agg: 'sum'},
+                {id: 'sys_bw_read', suffix: 'storage.summary.readBandwidth', agg: 'sum'},
+                {id: 'sys_bw_write', suffix: 'storage.summary.writeBandwidth', agg: 'sum'},
+                {id: 'sys_latency', suffix: 'storage.summary.responseTime', agg: 'avg'}
+            ];
+            
+            var wanted = [];
+            for (var p = 0; p < paths.length; p++) {
+                var path = paths[p];
+                if (cpuMap[path]) { wanted.push(path); continue; }
+                for (var g = 0; g < groups.length; g++) {
+                    if (path.indexOf(groups[g].suffix) !== -1) { wanted.push(path); break; }
+                }
+            }
+            
+            if (wanted.length === 0) {
+                return JSON.stringify({entries: []});
+            }
+            
+            var existing = call('GET', '/api/types/metricRealTimeQuery/instances?fields=paths,interval&per_page=100');
+            var queryId = null;
+            if (existing && existing.entries && existing.entries.length > 0) {
+                queryId = existing.entries[0].content.id;
+            } else {
+                call('POST', '/api/types/metricRealTimeQuery/instances', JSON.stringify({paths: wanted, interval: interval}));
+                return JSON.stringify({entries: []});
+            }
+            
+            var results = call('GET', '/api/instances/metricRealTimeQuery/' + queryId + '/results?per_page=2000');
+            var entries = [];
+            
+            for (var pathKey in cpuMap) {
+                var found = [];
+                if (results && results.entries) { findValues(results.entries, pathKey, found); }
+                if (found.length > 0) {
+                    entries.push({id: cpuMap[pathKey], value: found[found.length - 1]});
+                }
+            }
+            
+            for (var gi = 0; gi < groups.length; gi++) {
+                var grp = groups[gi];
+                var vals = [];
+                for (var pp = 0; pp < paths.length; pp++) {
+                    if (paths[pp].indexOf(grp.suffix) !== -1) {
+                        var f = [];
+                        if (results && results.entries) { findValues(results.entries, paths[pp], f); }
+                        if (f.length > 0) { vals.push(f[f.length - 1]); }
+                    }
+                }
+                if (vals.length > 0) {
+                    var out;
+                    if (grp.agg === 'sum') {
+                        out = 0;
+                        for (var vi = 0; vi < vals.length; vi++) { out += vals[vi]; }
+                    } else {
+                        var s = 0;
+                        for (var vj = 0; vj < vals.length; vj++) { s += vals[vj]; }
+                        out = s / vals.length;
+                    }
+                    entries.push({id: grp.id, value: out});
+                }
+            }
+            
+            return JSON.stringify({entries: entries});
+          description: |
+            Discovers real-time-capable metric paths from the array's own metric catalog (SP CPU utilization, storage summary IOPS/bandwidth/response time), then creates/reuses a metricRealTimeQuery on the array and reads back its results. Output is a small fixed JSON object consumed by the dependent items below.
+            
+            EXPERIMENTAL: this item depends on Zabbix Script sandbox HTTP semantics and Dell's real-time metrics API and has not been validated against a live array. Test it against your environment; if dependent items stay in "no data", check Zabbix server log for the script's thrown errors and adjust the keyword filters (cpuMap / groups) to match the paths actually present under /api/types/metric/instances on your array.
+          timeout: 30s
+          tags:
+            - tag: class
+              value: performance
+            - tag: component
+              value: performance
+          triggers:
+            - uuid: bf51078fcc6c4f94886c66da2f270e29
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.perf.get,30m)=1'
+              name: 'Dell Unity: Failed fetching real-time performance metrics'
+              priority: AVERAGE
+        - uuid: cedb73dc37854f8d972d9274fc2bf5e8
+          name: 'Storage: Read IOPS'
+          type: DEPENDENT
+          key: 'unity.perf.iops[read]'
+          delay: '0'
+          status: DISABLED
+          units: IOPS
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[?(@.id==''sys_iops_read'')].value'
+            - type: JSONPATH
+              parameters:
+                - '$[0]'
+          master_item:
+            key: unity.perf.get
+          tags:
+            - tag: component
+              value: performance
+        - uuid: 37af324151a648ad8e51fd6a5dc69806
+          name: 'Storage: Total IOPS'
+          type: DEPENDENT
+          key: 'unity.perf.iops[total]'
+          delay: '0'
+          status: DISABLED
+          units: IOPS
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[?(@.id==''sys_iops_total'')].value'
+            - type: JSONPATH
+              parameters:
+                - '$[0]'
+          master_item:
+            key: unity.perf.get
+          tags:
+            - tag: component
+              value: performance
+        - uuid: ca0a0c15bcf9405ba232387ca43df754
+          name: 'Storage: Write IOPS'
+          type: DEPENDENT
+          key: 'unity.perf.iops[write]'
+          delay: '0'
+          status: DISABLED
+          units: IOPS
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[?(@.id==''sys_iops_write'')].value'
+            - type: JSONPATH
+              parameters:
+                - '$[0]'
+          master_item:
+            key: unity.perf.get
+          tags:
+            - tag: component
+              value: performance
+        - uuid: a2498c0925814151ba1ab7da751cf8b2
+          name: 'Storage: Average Response Time'
+          type: DEPENDENT
+          key: unity.perf.latency
+          delay: '0'
+          status: DISABLED
+          units: ms
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[?(@.id==''sys_latency'')].value'
+            - type: JSONPATH
+              parameters:
+                - '$[0]'
+          master_item:
+            key: unity.perf.get
+          tags:
+            - tag: component
+              value: performance
+          triggers:
+            - uuid: 9220a3223bb3478bad7bafca1882f699
+              expression: 'avg(/Dell Unity Storage by HTTP/unity.perf.latency,15m)>{$UNITY.STORAGE.LATENCY.HIGH}'
+              name: 'Dell Unity: Storage response time is critical (> {$UNITY.STORAGE.LATENCY.HIGH}ms)'
+              priority: HIGH
+            - uuid: f8b1939e641b4503af8adfb3d26752f5
+              expression: 'avg(/Dell Unity Storage by HTTP/unity.perf.latency,15m)>{$UNITY.STORAGE.LATENCY.AVERAGE}'
+              name: 'Dell Unity: Storage response time is high (> {$UNITY.STORAGE.LATENCY.AVERAGE}ms)'
+              priority: AVERAGE
+              dependencies:
+                - name: 'Dell Unity: Storage response time is critical (> {$UNITY.STORAGE.LATENCY.HIGH}ms)'
+                  expression: 'avg(/Dell Unity Storage by HTTP/unity.perf.latency,15m)>{$UNITY.STORAGE.LATENCY.HIGH}'
+        - uuid: 08406b7f64f1418fbfc018ed58b7c61e
+          name: 'Dell Unity Storage Pool Metrics'
+          type: HTTP_AGENT
+          key: unity.pool.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects storage pool capacity, utilization, subscription (thin provisioning), RAID configuration, and health data. Critical metric for storage capacity management, RAID health, oversubscription risk, and performance trending.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/pool/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,raidType,sizeFree,sizeTotal,sizeUsed,sizeSubscribed,type'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: capacity
+            - tag: component
+              value: pool
+          triggers:
+            - uuid: 197e1755f348411c9861f8241817cdb1
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.pool.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching storage pools data'
+              priority: HIGH
+        - uuid: afbabf38dbd046f9b5f5efd61dcae1bf
+          name: 'Dell Unity Power Supply Metrics'
+          type: HTTP_AGENT
+          key: unity.psu.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects power supply unit (PSU) health, status, and configuration data. Monitors PSU health to ensure redundancy and detect potential power delivery failures.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/powerSupply/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,needsReplacement,slotNumber,manufacturer,model,firmwareVersion,emcSerialNumber,vendorPartNumber,vendorSerialNumber,emcPartNumber'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: hardware
+            - tag: component
+              value: 'power supply'
+          triggers:
+            - uuid: cb76d920f9d64f97a4729cb9b68c76cc
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.psu.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching power supplies data'
+              priority: HIGH
+        - uuid: fe71b747877e4e7b8e6983b8e35236e5
+          name: 'Dell Unity Replication Session Metrics'
+          type: HTTP_AGENT
+          key: unity.replication.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects replication session health and out-of-sync time. Returns an empty result set on systems with no replication configured.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/replicationSession/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,maxTimeOutOfSync'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: application
+            - tag: component
+              value: replication
+          triggers:
+            - uuid: 55a06e448f4f4ac3b347aac557466974
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.replication.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching replication session data'
+              priority: HIGH
+        - uuid: ebe886628024473ab7140d6db614757c
+          name: 'Dell Unity Storage Processor Metrics'
+          type: HTTP_AGENT
+          key: unity.sp.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects storage processor (SP) health, model, memory, firmware, and manufacturer data. Critical for monitoring processor redundancy, firmware updates, and system availability.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/storageProcessor/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,needsReplacement,modelName,memorySize,biosFirmwareRevision,manufacturer,model,emcSerialNumber,vendorPartNumber,vendorSerialNumber,emcPartNumber'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: hardware
+            - tag: component
+              value: 'storage processor'
+          triggers:
+            - uuid: 35b30074ea594c889cc3dd5846f42f52
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.sp.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching storage processors data'
+              priority: HIGH
+        - uuid: 13debdec2feb417ca40bf4578cc9b4c4
+          name: 'Dell Unity System Status'
+          type: HTTP_AGENT
+          key: unity.system.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects overall storage array health and status metrics. Master health indicator used to trigger alerts when array-level health degradation is detected.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/system/instances'
+          query_fields:
+            - name: fields
+              value: 'health,name,serialNumber,internalModel,platform,currentPower'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: availability
+            - tag: component
+              value: system
+          triggers:
+            - uuid: 49a4c09fe33046deb42fdfd1ab7c6d34
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.system.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching system health status'
+              priority: HIGH
+        - uuid: 572ec7a668c643ba83041e3d34b3cfee
+          name: 'Dell Unity System Information'
+          type: HTTP_AGENT
+          key: unity.system.info.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Retrieves storage array system information including model, serial number, firmware version, and system configuration. Used for asset inventory and version tracking.'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/basicSystemInfo/instances'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: inventory
+            - tag: component
+              value: system
+          triggers:
+            - uuid: 166c71fa4a354140aba216fa7c095ac0
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.system.info.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching basic system information'
+              priority: HIGH
+        - uuid: b25b1b245a4d4e059dc13ad9f1f90b1d
+          name: 'API: Current Version'
+          type: DEPENDENT
+          key: 'unity.system.info[api_version]'
+          delay: '0'
+          value_type: TEXT
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.apiVersion'
+          master_item:
+            key: unity.system.info.get
+          tags:
+            - tag: component
+              value: system
+        - uuid: f00d44b7f8424f528d0342b0f76b7c0a
+          name: 'API: Earliest Supported Version'
+          type: DEPENDENT
+          key: 'unity.system.info[earliest_api_version]'
+          delay: '0'
+          value_type: TEXT
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.earliestApiVersion'
+          master_item:
+            key: unity.system.info.get
+          tags:
+            - tag: component
+              value: system
+        - uuid: 29ab116ffce94773b128da7584ce79e8
+          name: 'OS: Hardware Model'
+          type: DEPENDENT
+          key: 'unity.system.info[model]'
+          delay: '0'
+          value_type: TEXT
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.model'
+          master_item:
+            key: unity.system.info.get
+          tags:
+            - tag: component
+              value: system
+        - uuid: 47f1f30d3eac4d86871ca48047e45948
+          name: 'OS: System Name'
+          type: DEPENDENT
+          key: 'unity.system.info[name]'
+          delay: '0'
+          value_type: TEXT
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.name'
+          master_item:
+            key: unity.system.info.get
+          tags:
+            - tag: component
+              value: system
+        - uuid: 2f7f793d94624521b284bcf20c62a094
+          name: 'OS: Software Full Version'
+          type: DEPENDENT
+          key: 'unity.system.info[software_full_version]'
+          delay: '0'
+          value_type: TEXT
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.softwareFullVersion'
+          master_item:
+            key: unity.system.info.get
+          tags:
+            - tag: component
+              value: system
+        - uuid: 760268894dbc4957ab41bf1c742bcb69
+          name: 'OS: Software Version'
+          type: DEPENDENT
+          key: 'unity.system.info[software_version]'
+          delay: '0'
+          value_type: TEXT
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.softwareVersion'
+          master_item:
+            key: unity.system.info.get
+          tags:
+            - tag: component
+              value: system
+        - uuid: 779032eab5474e06a253f4e53649d884
+          name: 'Dell Unity System-Wide Capacity Metrics'
+          type: HTTP_AGENT
+          key: unity.systemcapacity.get
+          delay: 15m
+          value_type: TEXT
+          trends: '0'
+          authtype: BASIC
+          username: '{$DELL_UNITY.USERNAME}'
+          password: '{$DELL_UNITY.PASSWORD}'
+          description: 'Collects array-wide usable capacity, used, free, and subscribed (thin-provisioned) space across all pools, independent of any single pool. Single-instance resource (id 0).'
+          url: 'https://{$DELL_UNITY.HOSTNAME}/api/types/systemCapacity/instances'
+          query_fields:
+            - name: fields
+              value: 'sizeFree,sizeTotal,sizeUsed,sizeSubscribed'
+          headers:
+            - name: Accept
+              value: application/json
+            - name: Content-Type
+              value: application/json
+            - name: X-EMC-REST-CLIENT
+              value: 'true'
+          tags:
+            - tag: class
+              value: capacity
+            - tag: component
+              value: capacity
+          triggers:
+            - uuid: fe27016b8994432f8bc1bc00925ce0f1
+              expression: 'nodata(/Dell Unity Storage by HTTP/unity.systemcapacity.get,30m)=1'
+              name: 'Dell Unity: Failed Fetching system-wide capacity data'
+              priority: HIGH
+        - uuid: 424218f03bb24be9ab7e9dfe659bc8b2
+          name: 'System Capacity: Free'
+          type: DEPENDENT
+          key: 'unity.systemcapacity[size_free]'
+          delay: '0'
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.sizeFree'
+          master_item:
+            key: unity.systemcapacity.get
+          tags:
+            - tag: component
+              value: capacity
+        - uuid: 1a5abad07cb742998d2e912968103e92
+          name: 'System Capacity: Subscribed'
+          type: DEPENDENT
+          key: 'unity.systemcapacity[size_subscribed]'
+          delay: '0'
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.sizeSubscribed'
+          master_item:
+            key: unity.systemcapacity.get
+          tags:
+            - tag: component
+              value: capacity
+        - uuid: bdd5ba55202d4d21895753a85b021372
+          name: 'System Capacity: Total'
+          type: DEPENDENT
+          key: 'unity.systemcapacity[size_total]'
+          delay: '0'
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.sizeTotal'
+          master_item:
+            key: unity.systemcapacity.get
+          tags:
+            - tag: component
+              value: capacity
+        - uuid: f348ca0516834f0499507826907176d7
+          name: 'System Capacity: Used'
+          type: DEPENDENT
+          key: 'unity.systemcapacity[size_used]'
+          delay: '0'
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.sizeUsed'
+          master_item:
+            key: unity.systemcapacity.get
+          tags:
+            - tag: component
+              value: capacity
+        - uuid: 7d6435cadd2543c092502bf45ee2c88e
+          name: 'System Capacity: Subscribed %'
+          type: CALCULATED
+          key: 'unity.systemcapacity[subscribed_percent]'
+          delay: 5m
+          units: '%'
+          params: '(last(//unity.systemcapacity[size_subscribed]) * 100) / (last(//unity.systemcapacity[size_total]) + 1)'
+          tags:
+            - tag: component
+              value: capacity
+          triggers:
+            - uuid: a0e493b399f646a3905362444a859bf9
+              expression: 'last(/Dell Unity Storage by HTTP/unity.systemcapacity[subscribed_percent])>{$UNITY.POOL.SUBSCRIPTION.HIGH}'
+              name: 'Dell Unity: System-wide thin-provisioning oversubscription exceeds {$UNITY.POOL.SUBSCRIPTION.HIGH}%'
+              priority: AVERAGE
+        - uuid: a27031ef9a3e494c9b2ec2c3c676aa67
+          name: 'System Capacity: Used %'
+          type: CALCULATED
+          key: 'unity.systemcapacity[used_percent]'
+          delay: 5m
+          units: '%'
+          params: '(last(//unity.systemcapacity[size_used]) * 100) / (last(//unity.systemcapacity[size_total]) + 1)'
+          tags:
+            - tag: component
+              value: capacity
+          triggers:
+            - uuid: 877179041f3c4dfebcd25a82fe535c0c
+              expression: 'last(/Dell Unity Storage by HTTP/unity.systemcapacity[used_percent])>{$UNITY.SYSTEM.CAPACITY.HIGH}'
+              name: 'Dell Unity: System-wide capacity utilization is critical (> {$UNITY.SYSTEM.CAPACITY.HIGH}%)'
+              priority: HIGH
+            - uuid: 3653562f75254bfabc67af4258710c4e
+              expression: 'last(/Dell Unity Storage by HTTP/unity.systemcapacity[used_percent])>{$UNITY.SYSTEM.CAPACITY.AVERAGE}'
+              name: 'Dell Unity: System-wide capacity utilization is high (> {$UNITY.SYSTEM.CAPACITY.AVERAGE}%)'
+              priority: AVERAGE
+              dependencies:
+                - name: 'Dell Unity: System-wide capacity utilization is critical (> {$UNITY.SYSTEM.CAPACITY.HIGH}%)'
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.systemcapacity[used_percent])>{$UNITY.SYSTEM.CAPACITY.HIGH}'
+            - uuid: d5ab5dc41dba4030bc039a5dd7c7947a
+              expression: 'last(/Dell Unity Storage by HTTP/unity.systemcapacity[used_percent])>{$UNITY.SYSTEM.CAPACITY.WARNING}'
+              name: 'Dell Unity: System-wide capacity utilization is warning (> {$UNITY.SYSTEM.CAPACITY.WARNING}%)'
+              priority: WARNING
+              dependencies:
+                - name: 'Dell Unity: System-wide capacity utilization is critical (> {$UNITY.SYSTEM.CAPACITY.HIGH}%)'
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.systemcapacity[used_percent])>{$UNITY.SYSTEM.CAPACITY.HIGH}'
+                - name: 'Dell Unity: System-wide capacity utilization is high (> {$UNITY.SYSTEM.CAPACITY.AVERAGE}%)'
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.systemcapacity[used_percent])>{$UNITY.SYSTEM.CAPACITY.AVERAGE}'
+        - uuid: bccf3734ce2b4f9abd137fc76713dc11
+          name: 'System: Power Consumption'
+          type: DEPENDENT
+          key: 'unity.system[current_power]'
+          delay: '0'
+          units: W
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.currentPower'
+          master_item:
+            key: unity.system.get
+          tags:
+            - tag: component
+              value: system
+        - uuid: 26e610e0612942be9e11af4052ae6083
+          name: 'System: Health Status'
+          type: DEPENDENT
+          key: 'unity.system[health]'
+          delay: '0'
+          valuemap:
+            name: 'Component Health Status'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.health.value'
+          master_item:
+            key: unity.system.get
+          tags:
+            - tag: component
+              value: system
+          triggers:
+            - uuid: eb3e6674eab54acaa7748f3168b2d317
+              expression: 'last(/Dell Unity Storage by HTTP/unity.system[health])<>5 and last(/Dell Unity Storage by HTTP/unity.system[health])<>7'
+              name: 'System health status is degraded'
+              priority: HIGH
+              manual_close: 'YES'
+            - uuid: 5bac085348324d05a7aa4279e59d5d4e
+              expression: 'last(/Dell Unity Storage by HTTP/unity.system[health])=7'
+              name: 'System health status is OK with a minor condition (OK_BUT)'
+              priority: WARNING
+              manual_close: 'YES'
+              dependencies:
+                - name: 'System health status is degraded'
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.system[health])<>5 and last(/Dell Unity Storage by HTTP/unity.system[health])<>7'
+        - uuid: 83cefce0a01a46329049900478b49422
+          name: 'System: Internal Model'
+          type: DEPENDENT
+          key: 'unity.system[internal_model]'
+          delay: '0'
+          value_type: TEXT
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.internalModel'
+          master_item:
+            key: unity.system.get
+          tags:
+            - tag: component
+              value: system
+        - uuid: d5c35d37dead471f88e138c0478387df
+          name: 'System: Hostname'
+          type: DEPENDENT
+          key: 'unity.system[name]'
+          delay: '0'
+          value_type: TEXT
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.name'
+          master_item:
+            key: unity.system.get
+          tags:
+            - tag: component
+              value: system
+        - uuid: 755fe89f045e4e6a80c95a0a83aea083
+          name: 'System: Platform'
+          type: DEPENDENT
+          key: 'unity.system[platform]'
+          delay: '0'
+          value_type: TEXT
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.platform'
+          master_item:
+            key: unity.system.get
+          tags:
+            - tag: component
+              value: system
+        - uuid: e3a5dff2108e481f95b091d2092e7c1b
+          name: 'System: Serial Number'
+          type: DEPENDENT
+          key: 'unity.system[serial_number]'
+          delay: '0'
+          value_type: TEXT
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.entries[0].content.serialNumber'
+          master_item:
+            key: unity.system.get
+          tags:
+            - tag: component
+              value: system
+      discovery_rules:
+        - uuid: 7654fddb2ebc4d488d3f38149a53886c
+          name: 'Dell Unity Alert Discovery'
+          type: DEPENDENT
+          key: unity.alert
+          delay: '0'
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers currently active alerts on the array and raises a problem per alert whose severity is at or above {$UNITY.ALERT.SEVERITY.MAX} (lower value = more severe, syslog-style 0-7 scale).'
+          item_prototypes:
+            - uuid: 930aa5ab2ae4418484989f3d460faf99
+              name: 'Alert {#ID}: Acknowledged'
+              type: DEPENDENT
+              key: 'unity.alert.acknowledged[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.isAcknowledged'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.alert.get
+              tags:
+                - tag: component
+                  value: alert
+            - uuid: 3bf72fc039364b508c0d77ef37c224ef
+              name: 'Alert {#ID}: Component'
+              type: DEPENDENT
+              key: 'unity.alert.component[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.component'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.alert.get
+              tags:
+                - tag: component
+                  value: alert
+            - uuid: 00ffaba64c3642b88153cb4abb9f73dc
+              name: 'Alert {#ID}: Description'
+              type: DEPENDENT
+              key: 'unity.alert.description[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.description'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.alert.get
+              tags:
+                - tag: component
+                  value: alert
+            - uuid: 1d9f28366a5b49c1b2071d24de4788c3
+              name: 'Alert {#ID}: Message ID'
+              type: DEPENDENT
+              key: 'unity.alert.message_id[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.messageId'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.alert.get
+              tags:
+                - tag: component
+                  value: alert
+            - uuid: 0496522021364a4aba8a1ae38e8c0316
+              name: 'Alert {#ID}: Severity'
+              type: DEPENDENT
+              key: 'unity.alert.severity[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Alert Severity'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.severity'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.alert.get
+              tags:
+                - tag: component
+                  value: alert
+              trigger_prototypes:
+                - uuid: e9f2f76a138c4f739946c812076ca50f
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.alert.severity[{#ID}])<={$UNITY.ALERT.SEVERITY.MAX}'
+                  name: 'Alert {#ID}: {#DESCRIPTION}'
+                  priority: HIGH
+                  manual_close: 'YES'
+            - uuid: 7e082a8bcf27477cbb3b2066b7b5c270
+              name: 'Alert {#ID}: Timestamp'
+              type: DEPENDENT
+              key: 'unity.alert.timestamp[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.timestamp'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.alert.get
+              tags:
+                - tag: component
+                  value: alert
+          master_item:
+            key: unity.alert.get
+          lld_macro_paths:
+            - lld_macro: '{#DESCRIPTION}'
+              path: $.content.description
+            - lld_macro: '{#ID}'
+              path: $.content.id
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: b85044ac14334154aedbd37dae063462
+          name: 'Dell Unity Battery Discovery'
+          type: DEPENDENT
+          key: unity.battery
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers battery backup units (BBU) in the Dell Unity storage array. Creates items to monitor battery health and replacement status.'
+          item_prototypes:
+            - uuid: 2f985266e6db4a258faada690a6bc75f
+              name: 'Battery {#NAME}: EMC Serial Number'
+              type: DEPENDENT
+              key: 'unity.battery.emc_serial_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcSerialNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.battery.get
+              tags:
+                - tag: component
+                  value: battery
+              trigger_prototypes:
+                - uuid: 666a3c826164476396b39ba85536dc21
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.battery.emc_serial_number[{#ID}])=1'
+                  name: 'Battery {#NAME}: EMC serial number changed'
+                  priority: INFO
+            - uuid: 7beeaab9a2a342ed83328c576904d7af
+              name: 'Battery {#NAME}: Firmware Version'
+              type: DEPENDENT
+              key: 'unity.battery.firmware_version[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.firmwareVersion'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.battery.get
+              tags:
+                - tag: component
+                  value: battery
+              trigger_prototypes:
+                - uuid: b8b6d2bafc274eb9bffc45a3eea95499
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.battery.firmware_version[{#ID}])=1'
+                  name: 'Battery {#NAME}: Firmware version changed'
+                  priority: INFO
+            - uuid: ccd20d1877164ef49ec4f98b23314dfe
+              name: 'Battery {#NAME}: Health Status'
+              type: DEPENDENT
+              key: 'unity.battery.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.battery.get
+              tags:
+                - tag: component
+                  value: battery
+              trigger_prototypes:
+                - uuid: 42a29cee20f142f985147453c015730d
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.battery.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.battery.health[{#ID}])<>7'
+                  name: 'Battery {#NAME}: Health status is degraded'
+                  priority: HIGH
+                - uuid: 2d4b327d037e40999c26727493253320
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.battery.health[{#ID}])=7'
+                  name: 'Battery {#NAME}: Health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Battery {#NAME}: Health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.battery.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.battery.health[{#ID}])<>7'
+            - uuid: 9a6922fc927e402d912523651d4c0408
+              name: 'Battery {#NAME}: Manufacturer'
+              type: DEPENDENT
+              key: 'unity.battery.manufacturer[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.manufacturer'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.battery.get
+              tags:
+                - tag: component
+                  value: battery
+            - uuid: 26fb5a93f5b14743b6453a847fef6761
+              name: 'Battery {#NAME}: Model'
+              type: DEPENDENT
+              key: 'unity.battery.model[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.model'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.battery.get
+              tags:
+                - tag: component
+                  value: battery
+            - uuid: c3dc33d8458748dba37ebc0d4fd252c1
+              name: 'Battery {#NAME}: Needs Replacement'
+              type: DEPENDENT
+              key: 'unity.battery.needs_replacement[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.needsReplacement'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.battery.get
+              tags:
+                - tag: component
+                  value: battery
+              trigger_prototypes:
+                - uuid: e227f97a1d2244459cfc3c0595fb5916
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.battery.needs_replacement[{#ID}])="true"'
+                  name: 'Battery {#NAME}: Replacement is required'
+                  priority: AVERAGE
+            - uuid: 0e12cfc7336d4a719d1cb0421f86870e
+              name: 'Battery {#NAME}: Slot Number'
+              type: DEPENDENT
+              key: 'unity.battery.slot_number[{#ID}]'
+              delay: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.slotNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.battery.get
+              tags:
+                - tag: component
+                  value: battery
+            - uuid: 1aa0e287f713495f88578c2d0ffb07ce
+              name: 'Battery {#NAME}: Vendor Part Number'
+              type: DEPENDENT
+              key: 'unity.battery.vendor_part_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.vendorPartNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.battery.get
+              tags:
+                - tag: component
+                  value: battery
+            - uuid: 6a647b0695954171a8e9fb99928266cf
+              name: 'Battery {#NAME}: Vendor Serial Number'
+              type: DEPENDENT
+              key: 'unity.battery.vendor_serial_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.vendorSerialNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.battery.get
+              tags:
+                - tag: component
+                  value: battery
+              trigger_prototypes:
+                - uuid: 919e12ae243d4895a2bc21578277b0ba
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.battery.vendor_serial_number[{#ID}])=1'
+                  name: 'Battery {#NAME}: Vendor serial number changed'
+                  priority: INFO
+          master_item:
+            key: unity.battery.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: 8add3a0c67db4235ad7f446938cf65ee
+          name: 'Dell Unity CIFS/SMB Share Discovery'
+          type: DEPENDENT
+          key: unity.cifs_share
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers CIFS/SMB shares configured on the Dell Unity array. Monitors share configuration and availability.'
+          item_prototypes:
+            - uuid: 9ae41cb9261b4c0e985fa9a7aed2c39d
+              name: 'CIFS Share {#NAME}: Creation Time'
+              type: DEPENDENT
+              key: 'unity.cifs_share.creation_time[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.creationTime'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.cifs_share.get
+              tags:
+                - tag: component
+                  value: cifs
+            - uuid: ac3d1a1deb3b491daed77fcda2440951
+              name: 'CIFS Share {#NAME}: Filesystem ID'
+              type: DEPENDENT
+              key: 'unity.cifs_share.filesystem_id[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.filesystem.id'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.cifs_share.get
+              tags:
+                - tag: component
+                  value: cifs
+            - uuid: 2e370e34973645bb8af73e42610ee4b7
+              name: 'CIFS Share {#NAME}: Is Read Only'
+              type: DEPENDENT
+              key: 'unity.cifs_share.is_read_only[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.isReadOnly'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.cifs_share.get
+              tags:
+                - tag: component
+                  value: cifs
+            - uuid: 3848781a24334eee8f78f6535610a074
+              name: 'CIFS Share {#NAME}: Is Snapshot'
+              type: DEPENDENT
+              key: 'unity.cifs_share.is_snapshot[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.snap'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.cifs_share.get
+              tags:
+                - tag: component
+                  value: cifs
+            - uuid: 09f2dc6ec5754ff6be08b0a7d11b03c6
+              name: 'CIFS Share {#NAME}: Modification Time'
+              type: DEPENDENT
+              key: 'unity.cifs_share.modification_time[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.modifiedTime'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.cifs_share.get
+              tags:
+                - tag: component
+                  value: cifs
+              trigger_prototypes:
+                - uuid: 8c42036ba1cd45ba8d644491ddb9ff46
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.cifs_share.modification_time[{#ID}])=1'
+                  name: 'CIFS Share {#NAME} Modified'
+                  priority: INFO
+            - uuid: c22d5199e9ad45f68eced0db4100669e
+              name: 'CIFS Share {#NAME}: Protocol / Type'
+              type: DEPENDENT
+              key: 'unity.cifs_share.protocol_type[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'CIFS Share Type'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.type'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.cifs_share.get
+              tags:
+                - tag: component
+                  value: cifs
+          master_item:
+            key: unity.cifs_share.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: da0c2802dd0a48f6876b82de17d136a3
+          name: 'Dell Unity DAE Enclosure Discovery'
+          type: DEPENDENT
+          key: unity.dae
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers expansion Disk Array Enclosures and monitors their health and identity. Produces no items on systems without expansion shelves.'
+          item_prototypes:
+            - uuid: f3a5566ec039476dbef6337c6fa75ea3
+              name: 'Enclosure {#NAME}: Bus ID'
+              type: DEPENDENT
+              key: 'unity.dae.bus_id[{#ID}]'
+              delay: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.busId'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.dae.get
+              tags:
+                - tag: component
+                  value: enclosure
+            - uuid: 3505144027494d6694394340d34f0b56
+              name: 'Enclosure {#NAME}: EMC Part Number'
+              type: DEPENDENT
+              key: 'unity.dae.emc_part_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcPartNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.dae.get
+              tags:
+                - tag: component
+                  value: enclosure
+            - uuid: 12725b72e77240bc9c33b147d7d2f11e
+              name: 'Enclosure {#NAME}: EMC Serial Number'
+              type: DEPENDENT
+              key: 'unity.dae.emc_serial_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcSerialNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.dae.get
+              tags:
+                - tag: component
+                  value: enclosure
+            - uuid: 76da435413ba4c9d8b788bfa85c11565
+              name: 'Enclosure {#NAME}: Health'
+              type: DEPENDENT
+              key: 'unity.dae.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.dae.get
+              tags:
+                - tag: component
+                  value: enclosure
+              trigger_prototypes:
+                - uuid: 463f5ef7d19c48e78a42059be3bbcae9
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.dae.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.dae.health[{#ID}])<>7'
+                  name: 'Enclosure {#NAME}: Health status is degraded'
+                  priority: HIGH
+                - uuid: 38426c3fc1b34be6ab7ae2509195583f
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.dae.health[{#ID}])=7'
+                  name: 'Enclosure {#NAME}: Health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Enclosure {#NAME}: Health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.dae.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.dae.health[{#ID}])<>7'
+            - uuid: 92d6ab479afa469aae4b727b064c848c
+              name: 'Enclosure {#NAME}: Model'
+              type: DEPENDENT
+              key: 'unity.dae.model[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.model'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.dae.get
+              tags:
+                - tag: component
+                  value: enclosure
+          master_item:
+            key: unity.dae.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: b54d9f3cfc1d431b80a5e9cd7afdcfcf
+          name: 'Dell Unity Disk Drive Discovery'
+          type: DEPENDENT
+          key: unity.disk
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers physical disk drives in the Dell Unity storage array. Creates items to monitor disk health, RAID status, capacity, speed, tier and estimated end-of-life.'
+          item_prototypes:
+            - uuid: a932b8a440634b37b860ac31640acaa3
+              name: 'Disk {#NAME} Current Speed'
+              type: DEPENDENT
+              key: 'unity.disk.current_speed[{#ID}]'
+              delay: '0'
+              units: bps
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.currentSpeed'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+            - uuid: 8623d089d6944b999749fd36011c3b81
+              name: 'Disk {#NAME} EMC Serial Number'
+              type: DEPENDENT
+              key: 'unity.disk.emc_serial_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcSerialNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+              trigger_prototypes:
+                - uuid: bc888b4a624c48bb82f2d5935dd582e6
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.disk.emc_serial_number[{#ID}])=1'
+                  name: 'Disk {#NAME} EMC Serial Number Changed'
+                  priority: INFO
+            - uuid: 20f4d8d3aae3416aa96a96764e412ece
+              name: 'Disk {#NAME} Estimated End-Of-Life'
+              type: DEPENDENT
+              key: 'unity.disk.eol[{#ID}]'
+              delay: '0'
+              units: h
+              description: 'Estimated remaining service life in hours, derived from the array''s "H:MM:SS.mmm" duration string.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.estimatedEOL'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+                - type: JAVASCRIPT
+                  parameters:
+                    - 'return parseInt(String(value).split(":")[0], 10);'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+              trigger_prototypes:
+                - uuid: d03a598a40334aeba54ecee612445d2f
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.disk.eol[{#ID}])<{$UNITY.DISK.EOL.WARNING}'
+                  name: 'Disk {#NAME}: Approaching estimated end-of-life'
+                  priority: WARNING
+            - uuid: 3cd7061a65104b05b731525c6938b88d
+              name: 'Disk {#NAME} Is Fast Cache In Use'
+              type: DEPENDENT
+              key: 'unity.disk.fast_cache_in_use[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.isFastCacheInUse'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+            - uuid: 13cd584697af47b2861dc017a4d11ebe
+              name: 'Disk {#NAME} Health'
+              type: DEPENDENT
+              key: 'unity.disk.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+              trigger_prototypes:
+                - uuid: 3e0950fb2f324022902e357fdddca310
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.disk.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.disk.health[{#ID}])<>7'
+                  name: 'Disk {#NAME} health status is degraded'
+                  priority: HIGH
+                - uuid: c6c47cb8b09941afb4185e4b1f7f5763
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.disk.health[{#ID}])=7'
+                  name: 'Disk {#NAME} health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Disk {#NAME} health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.disk.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.disk.health[{#ID}])<>7'
+            - uuid: 1830d9c7d02a436f9c2fd4666889d69a
+              name: 'Disk {#NAME} Is In Use'
+              type: DEPENDENT
+              key: 'unity.disk.in_use[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.isInUse'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+            - uuid: 954ea80c42884af4a1f82410e20da3ba
+              name: 'Disk {#NAME} Manufacturer'
+              type: DEPENDENT
+              key: 'unity.disk.manufacturer[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.manufacturer'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+            - uuid: 41cf9fd01e09415da5ce1851ba1b1f01
+              name: 'Disk {#NAME} Needs Replacement'
+              type: DEPENDENT
+              key: 'unity.disk.needs_replacement[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.needsReplacement'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+              trigger_prototypes:
+                - uuid: a5e59fbe919949f895b1ad1aae547c68
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.disk.needs_replacement[{#ID}])="true"'
+                  name: 'Disk {#NAME} Replacement Needed'
+                  priority: AVERAGE
+            - uuid: 307f05214a6e4f12a3ce93d2091529c8
+              name: 'Disk {#NAME} RPM'
+              type: DEPENDENT
+              key: 'unity.disk.rpm[{#ID}]'
+              delay: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.rpm'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+            - uuid: 331f2b99564b443a80dee076f8837cf9
+              name: 'Disk {#NAME} Size'
+              type: DEPENDENT
+              key: 'unity.disk.size[{#ID}]'
+              delay: '0'
+              units: B
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.size'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+            - uuid: 6f23dc9b9dab44c5864f0c6115fbf751
+              name: 'Disk {#NAME} Slot Number'
+              type: DEPENDENT
+              key: 'unity.disk.slot_number[{#ID}]'
+              delay: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.slotNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+            - uuid: e7f4e1695b974f929bc888c10d61e6b4
+              name: 'Disk {#NAME} Disk Technology (raw)'
+              type: DEPENDENT
+              key: 'unity.disk.technology[{#ID}]'
+              delay: '0'
+              description: 'Raw diskTechnology enum value as returned by the array. Not mapped to a label; cross-reference https://<array>/apidocs for this array''s exact enum definition before relying on specific values.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.diskTechnology'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+            - uuid: ed3fb65946cf41379e5a56722a9ad299
+              name: 'Disk {#NAME} Tier Type (raw)'
+              type: DEPENDENT
+              key: 'unity.disk.tier_type[{#ID}]'
+              delay: '0'
+              description: 'Raw tierType enum value as returned by the array. Not mapped to a label; cross-reference https://<array>/apidocs for this array''s exact enum definition before relying on specific values.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.tierType'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+            - uuid: 1cd14c5ee577482085edf3bccfbee94b
+              name: 'Disk {#NAME} Firmware Version'
+              type: DEPENDENT
+              key: 'unity.disk.version[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.version'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.disk.get
+              tags:
+                - tag: component
+                  value: disk
+              trigger_prototypes:
+                - uuid: 09487317406f4dcfb70b346c15570726
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.disk.version[{#ID}])=1'
+                  name: 'Disk {#NAME} Firmware Version Changed'
+                  priority: INFO
+          master_item:
+            key: unity.disk.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: 2d202019a98b4d398abadc988f21c5d6
+          name: 'Dell Unity DPE Enclosure Discovery'
+          type: DEPENDENT
+          key: unity.dpe
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers base Disk Processor Enclosures and monitors their health and identity.'
+          item_prototypes:
+            - uuid: 663a86cb365246b991d4ce7264ce8d97
+              name: 'Enclosure {#NAME}: EMC Part Number'
+              type: DEPENDENT
+              key: 'unity.dpe.emc_part_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcPartNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.dpe.get
+              tags:
+                - tag: component
+                  value: enclosure
+            - uuid: f669601b990c4d5fbb3a086f253d74cf
+              name: 'Enclosure {#NAME}: EMC Serial Number'
+              type: DEPENDENT
+              key: 'unity.dpe.emc_serial_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcSerialNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.dpe.get
+              tags:
+                - tag: component
+                  value: enclosure
+            - uuid: c4e96b053c9042bfb2ba755dad40a2b2
+              name: 'Enclosure {#NAME}: Health'
+              type: DEPENDENT
+              key: 'unity.dpe.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.dpe.get
+              tags:
+                - tag: component
+                  value: enclosure
+              trigger_prototypes:
+                - uuid: a6fdc5aa81e746cfa57b842d69e7f572
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.dpe.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.dpe.health[{#ID}])<>7'
+                  name: 'Enclosure {#NAME}: Health status is degraded'
+                  priority: HIGH
+                - uuid: 2164afd2c0a040cd860b1317d8faecfd
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.dpe.health[{#ID}])=7'
+                  name: 'Enclosure {#NAME}: Health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Enclosure {#NAME}: Health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.dpe.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.dpe.health[{#ID}])<>7'
+            - uuid: c8579b187afc4f59986e7b7ff21605cf
+              name: 'Enclosure {#NAME}: Model'
+              type: DEPENDENT
+              key: 'unity.dpe.model[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.model'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.dpe.get
+              tags:
+                - tag: component
+                  value: enclosure
+          master_item:
+            key: unity.dpe.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: 1e720c2a04174f3f85c4e568f94a21ae
+          name: 'Dell Unity Cooling Fan Discovery'
+          type: DEPENDENT
+          key: unity.fan
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers cooling fans in the Dell Unity storage array. Monitors fan health to ensure adequate thermal management.'
+          item_prototypes:
+            - uuid: f9695ccf2a3c47bdb3959d5c51085920
+              name: 'Fan {#NAME} EMC Part Number'
+              type: DEPENDENT
+              key: 'unity.fan.emc_part_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcPartNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fan.get
+              tags:
+                - tag: component
+                  value: fan
+            - uuid: 786762f3ce9d4ef383e77574bfca7aed
+              name: 'Fan {#NAME} EMC Serial Number'
+              type: DEPENDENT
+              key: 'unity.fan.emc_serial_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcSerialNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fan.get
+              tags:
+                - tag: component
+                  value: fan
+              trigger_prototypes:
+                - uuid: 08f5e08bcb584772a4dedfc4ecc049d8
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.fan.emc_serial_number[{#ID}])=1'
+                  name: 'Fan {#NAME} EMC Serial Number Changed'
+                  priority: INFO
+            - uuid: a69d60f01380486a8f4694174eb039fd
+              name: 'Fan {#NAME} Health'
+              type: DEPENDENT
+              key: 'unity.fan.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fan.get
+              tags:
+                - tag: component
+                  value: fan
+              trigger_prototypes:
+                - uuid: fdab5495985347749c48997cd9f4735f
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.fan.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.fan.health[{#ID}])<>7'
+                  name: 'Fan {#NAME} health status is degraded'
+                  priority: HIGH
+                - uuid: 46fa920e274442c39b5a7d267b340939
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.fan.health[{#ID}])=7'
+                  name: 'Fan {#NAME} health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Fan {#NAME} health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.fan.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.fan.health[{#ID}])<>7'
+            - uuid: 5b3d2423152140148f710cbbacb7a856
+              name: 'Fan {#NAME} Manufacturer'
+              type: DEPENDENT
+              key: 'unity.fan.manufacturer[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.manufacturer'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fan.get
+              tags:
+                - tag: component
+                  value: fan
+            - uuid: 7f8871c1079e446a916b8baa23647ea8
+              name: 'Fan {#NAME} Model'
+              type: DEPENDENT
+              key: 'unity.fan.model[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.model'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fan.get
+              tags:
+                - tag: component
+                  value: fan
+            - uuid: d23749a926d248208fecece7ce9809b4
+              name: 'Fan {#NAME} Needs Replacement'
+              type: DEPENDENT
+              key: 'unity.fan.needs_replacement[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.needsReplacement'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fan.get
+              tags:
+                - tag: component
+                  value: fan
+              trigger_prototypes:
+                - uuid: 950b5990e9c64bca88126e4d6fe3a11d
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.fan.needs_replacement[{#ID}])="true"'
+                  name: 'Fan {#NAME} Replacement Needed'
+                  priority: AVERAGE
+            - uuid: 2648115209294637b6bb928c0b512371
+              name: 'Fan {#NAME} Slot Number'
+              type: DEPENDENT
+              key: 'unity.fan.slot_number[{#ID}]'
+              delay: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.slotNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fan.get
+              tags:
+                - tag: component
+                  value: fan
+            - uuid: 05ef5cbceac5481e970b62774eb9e3ba
+              name: 'Fan {#NAME} Vendor Part Number'
+              type: DEPENDENT
+              key: 'unity.fan.vendor_part_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.vendorPartNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fan.get
+              tags:
+                - tag: component
+                  value: fan
+            - uuid: 46def593149e4dd3a2afdda13b3af278
+              name: 'Fan {#NAME} Vendor Serial Number'
+              type: DEPENDENT
+              key: 'unity.fan.vendor_serial_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.vendorSerialNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fan.get
+              tags:
+                - tag: component
+                  value: fan
+          master_item:
+            key: unity.fan.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: 28636cdac33047f2968ccc0a87a05ea4
+          name: 'Dell Unity Fibre Channel Port Discovery'
+          type: DEPENDENT
+          key: unity.fcport
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers Fibre Channel front-end ports and monitors health, link state, and replacement status. Produces no items on systems without FC I/O modules.'
+          item_prototypes:
+            - uuid: 26f8084f6c1e41ce880bca8251dfb7dc
+              name: 'FC Port {#NAME}: Current Speed'
+              type: DEPENDENT
+              key: 'unity.fcport.current_speed[{#ID}]'
+              delay: '0'
+              units: bps
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.currentSpeed'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+                - type: MULTIPLIER
+                  parameters:
+                    - '1000000000'
+              master_item:
+                key: unity.fcport.get
+              tags:
+                - tag: component
+                  value: 'fc port'
+            - uuid: 85dad8bbf63e4fba8a16bee57d4a18f3
+              name: 'FC Port {#NAME}: Health'
+              type: DEPENDENT
+              key: 'unity.fcport.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fcport.get
+              tags:
+                - tag: component
+                  value: 'fc port'
+              trigger_prototypes:
+                - uuid: 841f4b125716476597787eac7f79c905
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.fcport.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.fcport.health[{#ID}])<>7'
+                  name: 'FC Port {#NAME}: Health status is degraded'
+                  priority: HIGH
+                - uuid: a56781124ed043cf816a2231dc23c47b
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.fcport.health[{#ID}])=7'
+                  name: 'FC Port {#NAME}: Health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'FC Port {#NAME}: Health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.fcport.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.fcport.health[{#ID}])<>7'
+            - uuid: 0a27fd188eef4665965f58dfdbc2325a
+              name: 'FC Port {#NAME}: Needs Replacement'
+              type: DEPENDENT
+              key: 'unity.fcport.needs_replacement[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.needsReplacement'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fcport.get
+              tags:
+                - tag: component
+                  value: 'fc port'
+              trigger_prototypes:
+                - uuid: fee5bd6820a34519a4042ae97de11942
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.fcport.needs_replacement[{#ID}])="true"'
+                  name: 'FC Port {#NAME}: Replacement Needed'
+                  priority: AVERAGE
+            - uuid: 6c3761ed377a46d8b4f03a2cc9c02c00
+              name: 'FC Port {#NAME}: Slot Number'
+              type: DEPENDENT
+              key: 'unity.fcport.slot_number[{#ID}]'
+              delay: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.slotNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fcport.get
+              tags:
+                - tag: component
+                  value: 'fc port'
+            - uuid: 922f0bc603a94385800207dfe0b0a960
+              name: 'FC Port {#NAME}: WWN'
+              type: DEPENDENT
+              key: 'unity.fcport.wwn[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.wwn'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.fcport.get
+              tags:
+                - tag: component
+                  value: 'fc port'
+          master_item:
+            key: unity.fcport.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: ccd3e4939824498dac14593199ab3535
+          name: 'Dell Unity File System Discovery'
+          type: DEPENDENT
+          key: unity.filesystem
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers file systems on the Dell Unity array. Creates items to monitor filesystem capacity, utilization, and health.'
+          item_prototypes:
+            - uuid: ca4a7256fdfb4ed1a2d8e0a7d64e322e
+              name: 'Filesystem {#NAME} Format'
+              type: DEPENDENT
+              key: 'unity.filesystem.format[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Filesystem Storage Format'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.format'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.filesystem.get
+              tags:
+                - tag: component
+                  value: filesystem
+            - uuid: 5d35743204854bab9362a8f99be1bf26
+              name: 'Filesystem {#NAME} Health'
+              type: DEPENDENT
+              key: 'unity.filesystem.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.filesystem.get
+              tags:
+                - tag: component
+                  value: filesystem
+              trigger_prototypes:
+                - uuid: ab84fbd5f96142dd90a1c3ad46f11a02
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.filesystem.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.filesystem.health[{#ID}])<>7'
+                  name: 'Filesystem {#NAME} health status is degraded'
+                  priority: HIGH
+                - uuid: f4439bbf34e2437b9b0ee352678669b5
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.filesystem.health[{#ID}])=7'
+                  name: 'Filesystem {#NAME} health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Filesystem {#NAME} health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.filesystem.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.filesystem.health[{#ID}])<>7'
+            - uuid: 93cc97d1cf2347a8aad7428998baaa65
+              name: 'Filesystem {#NAME} ID'
+              type: DEPENDENT
+              key: 'unity.filesystem.id[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.id'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.filesystem.get
+              tags:
+                - tag: component
+                  value: filesystem
+            - uuid: 2da4797628454eb99caad7422744a29d
+              name: 'Filesystem {#NAME} Name'
+              type: DEPENDENT
+              key: 'unity.filesystem.name[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.name'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.filesystem.get
+              tags:
+                - tag: component
+                  value: filesystem
+            - uuid: 655ddc43606a4368a17416a54dbbe33c
+              name: 'Filesystem {#NAME} Free Size'
+              type: CALCULATED
+              key: 'unity.filesystem.space_free[{#ID}]'
+              delay: 5m
+              units: B
+              params: 'last(//unity.filesystem.space_total[{#ID}]) - last(//unity.filesystem.space_used[{#ID}])'
+              tags:
+                - tag: component
+                  value: filesystem
+            - uuid: 6a2791ac59a945bdb97da8855e3dfe40
+              name: 'Filesystem {#NAME} Free Size %'
+              type: CALCULATED
+              key: 'unity.filesystem.space_free_percent[{#ID}]'
+              delay: 5m
+              units: '%'
+              params: '((last(//unity.filesystem.space_total[{#ID}]) - last(//unity.filesystem.space_used[{#ID}])) * 100) / (last(//unity.filesystem.space_total[{#ID}]) + 1)'
+              tags:
+                - tag: component
+                  value: filesystem
+            - uuid: a6d44137892549b1a8e8a46a1ce7e4ab
+              name: 'Filesystem {#NAME} Total Size'
+              type: DEPENDENT
+              key: 'unity.filesystem.space_total[{#ID}]'
+              delay: '0'
+              units: B
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.sizeTotal'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.filesystem.get
+              tags:
+                - tag: component
+                  value: filesystem
+            - uuid: 75549ab4f2f9422c94221f300b856460
+              name: 'Filesystem {#NAME} Used Size'
+              type: DEPENDENT
+              key: 'unity.filesystem.space_used[{#ID}]'
+              delay: '0'
+              units: B
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.sizeUsed'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.filesystem.get
+              tags:
+                - tag: component
+                  value: filesystem
+            - uuid: f3a259c62fa248e2b0a99c183b289da5
+              name: 'Filesystem {#NAME} Used Size %'
+              type: CALCULATED
+              key: 'unity.filesystem.space_used_percent[{#ID}]'
+              delay: 5m
+              units: '%'
+              params: '(last(//unity.filesystem.space_used[{#ID}]) * 100) / (last(//unity.filesystem.space_total[{#ID}]) + 1)'
+              tags:
+                - tag: component
+                  value: filesystem
+              trigger_prototypes:
+                - uuid: 920c706230f24c2ab83dd1e15883a470
+                  expression: 'avg(/Dell Unity Storage by HTTP/unity.filesystem.space_used_percent[{#ID}],1d)>{$UNITY.FILESYSTEM.USAGE.AVERAGE}'
+                  name: 'Filesystem {#NAME} Reached {$UNITY.FILESYSTEM.USAGE.AVERAGE}% Usage'
+                  priority: AVERAGE
+                  dependencies:
+                    - name: 'Filesystem {#NAME} Reached {$UNITY.FILESYSTEM.USAGE.HIGH}% Usage'
+                      expression: 'avg(/Dell Unity Storage by HTTP/unity.filesystem.space_used_percent[{#ID}],1d)>{$UNITY.FILESYSTEM.USAGE.HIGH}'
+                - uuid: 86fd5e54a0cc4175ba5d5efc4d950e78
+                  expression: 'avg(/Dell Unity Storage by HTTP/unity.filesystem.space_used_percent[{#ID}],1d)>{$UNITY.FILESYSTEM.USAGE.HIGH}'
+                  name: 'Filesystem {#NAME} Reached {$UNITY.FILESYSTEM.USAGE.HIGH}% Usage'
+                  priority: HIGH
+                - uuid: 4568acaa643a4b7c8b272d133ed0ef9a
+                  expression: 'avg(/Dell Unity Storage by HTTP/unity.filesystem.space_used_percent[{#ID}],1d)>{$UNITY.FILESYSTEM.USAGE.WARNING}'
+                  name: 'Filesystem {#NAME} Reached {$UNITY.FILESYSTEM.USAGE.WARNING}% Usage'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Filesystem {#NAME} Reached {$UNITY.FILESYSTEM.USAGE.AVERAGE}% Usage'
+                      expression: 'avg(/Dell Unity Storage by HTTP/unity.filesystem.space_used_percent[{#ID}],1d)>{$UNITY.FILESYSTEM.USAGE.AVERAGE}'
+                    - name: 'Filesystem {#NAME} Reached {$UNITY.FILESYSTEM.USAGE.HIGH}% Usage'
+                      expression: 'avg(/Dell Unity Storage by HTTP/unity.filesystem.space_used_percent[{#ID}],1d)>{$UNITY.FILESYSTEM.USAGE.HIGH}'
+            - uuid: 5f8c5498352a475c99d2e71e7d759e7c
+              name: 'Filesystem {#NAME} Type'
+              type: DEPENDENT
+              key: 'unity.filesystem.type[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Filesystem Type'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.type'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.filesystem.get
+              tags:
+                - tag: component
+                  value: filesystem
+          master_item:
+            key: unity.filesystem.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: a3e79614a27945fd8de107204ba4a482
+          name: 'Dell Unity Network Interface Discovery'
+          type: DEPENDENT
+          key: unity.interface
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers network interfaces configured on the Dell Unity storage array. Monitors network connectivity and interface health.'
+          item_prototypes:
+            - uuid: 9a0da761fab5461381d61b4645a0d72d
+              name: 'Interface {#NAME} Bond'
+              type: DEPENDENT
+              key: 'unity.interface.bond[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.bond'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.interfaces.get
+              tags:
+                - tag: component
+                  value: interface
+            - uuid: cdeae0c9c462481bba7970e0bb3c3acb
+              name: 'Interface {#NAME} Health'
+              type: DEPENDENT
+              key: 'unity.interface.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.interfaces.get
+              tags:
+                - tag: component
+                  value: interface
+              trigger_prototypes:
+                - uuid: 6ba009f17a124bdebe66821cc068bce3
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.interface.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.interface.health[{#ID}])<>7'
+                  name: 'Interface {#NAME} health status is degraded'
+                  priority: HIGH
+                - uuid: 3be48584c23d42c38da9ef275ec1fa31
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.interface.health[{#ID}])=7'
+                  name: 'Interface {#NAME} health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Interface {#NAME} health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.interface.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.interface.health[{#ID}])<>7'
+            - uuid: ef5712bb3eec4e009f88dffcaa2d8389
+              name: 'Interface {#NAME} Is Link Up'
+              type: DEPENDENT
+              key: 'unity.interface.is_link_up[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.isLinkUp'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.interfaces.get
+              tags:
+                - tag: component
+                  value: interface
+              trigger_prototypes:
+                - uuid: 7fc48a4140794f05bbed2107557f17de
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.interface.is_link_up[{#ID}])="false"'
+                  name: 'Interface {#NAME}: Link is down'
+                  priority: AVERAGE
+                - uuid: b35530f6d39b4482a85555973789b09d
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.interface.is_link_up[{#ID}])=1'
+                  name: 'Interface {#NAME} Link Status Changed'
+                  priority: INFO
+            - uuid: 6607e0d1802a4da2874bbac58d41f1d1
+              name: 'Interface {#NAME} Mac Address'
+              type: DEPENDENT
+              key: 'unity.interface.mac_address[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.macAddress'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.interfaces.get
+              tags:
+                - tag: component
+                  value: interface
+            - uuid: ffe68d4b7e8043a9af9a67e0586b88aa
+              name: 'Interface {#NAME} MTU'
+              type: DEPENDENT
+              key: 'unity.interface.mtu[{#ID}]'
+              delay: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.mtu'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.interfaces.get
+              tags:
+                - tag: component
+                  value: interface
+            - uuid: d9deb5751a7f4e9a8ffe7fa8b27b1c12
+              name: 'Interface {#NAME} Need Replacement'
+              type: DEPENDENT
+              key: 'unity.interface.needs_replacement[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.needsReplacement'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.interfaces.get
+              tags:
+                - tag: component
+                  value: interface
+              trigger_prototypes:
+                - uuid: 43cad7a21a274033a5acdfd99aa26a7e
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.interface.needs_replacement[{#ID}])="true"'
+                  name: 'Interface {#NAME} Replacement Needed'
+                  priority: AVERAGE
+            - uuid: 15e78270f2da4b8faa785f3105cfa6d5
+              name: 'Interface {#NAME} Port Number'
+              type: DEPENDENT
+              key: 'unity.interface.port_number[{#ID}]'
+              delay: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.portNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.interfaces.get
+              tags:
+                - tag: component
+                  value: interface
+            - uuid: c13e1411e76543ada8f087dae30737fe
+              name: 'Interface {#NAME} Speed'
+              type: DEPENDENT
+              key: 'unity.interface.speed[{#ID}]'
+              delay: '0'
+              units: Gbps
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.speed'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+                - type: MULTIPLIER
+                  parameters:
+                    - '0.001'
+              master_item:
+                key: unity.interfaces.get
+              tags:
+                - tag: component
+                  value: interface
+          master_item:
+            key: unity.interfaces.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: 4513363c40fc4ecdaa533bfee5ab4fe5
+          name: 'Dell Unity LUN Discovery'
+          type: DEPENDENT
+          key: unity.lun
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers block LUNs and monitors health, total/allocated capacity, and allocation percentage for thin-provisioning tracking.'
+          item_prototypes:
+            - uuid: e9472e7569e246fc8f1bffbfef95fe03
+              name: 'LUN {#NAME}: Health'
+              type: DEPENDENT
+              key: 'unity.lun.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.lun.get
+              tags:
+                - tag: component
+                  value: lun
+              trigger_prototypes:
+                - uuid: 6aecb3a7513e4bcf98afc125edf2fec4
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.lun.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.lun.health[{#ID}])<>7'
+                  name: 'LUN {#NAME}: Health status is degraded'
+                  priority: HIGH
+                - uuid: 1a312421ae2547ce90c57cd2e0037050
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.lun.health[{#ID}])=7'
+                  name: 'LUN {#NAME}: Health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'LUN {#NAME}: Health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.lun.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.lun.health[{#ID}])<>7'
+            - uuid: 27445be5ea854985945f4673f27d7436
+              name: 'LUN {#NAME}: Pool ID'
+              type: DEPENDENT
+              key: 'unity.lun.pool_id[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.pool.id'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.lun.get
+              tags:
+                - tag: component
+                  value: lun
+            - uuid: 42e1e718e0be4bf9b828d9f62f9b195e
+              name: 'LUN {#NAME}: Allocated Size'
+              type: DEPENDENT
+              key: 'unity.lun.space_allocated[{#ID}]'
+              delay: '0'
+              status: DISABLED
+              discover: NO_DISCOVER
+              units: B
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.sizeAllocated'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.lun.get
+              tags:
+                - tag: component
+                  value: lun
+            - uuid: 2f0f17e350d0450a98921252bd8b7771
+              name: 'LUN {#NAME}: Allocated %'
+              type: CALCULATED
+              key: 'unity.lun.space_allocated_percent[{#ID}]'
+              delay: 5m
+              status: DISABLED
+              discover: NO_DISCOVER
+              units: '%'
+              params: '(last(//unity.lun.space_allocated[{#ID}]) * 100) / (last(//unity.lun.space_total[{#ID}]) + 1)'
+              tags:
+                - tag: component
+                  value: lun
+              trigger_prototypes:
+                - uuid: 9be8251adb11427986f6492e54a7b0c2
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.lun.space_allocated_percent[{#ID}])>{$UNITY.LUN.USAGE.AVERAGE}'
+                  name: 'LUN {#NAME}: Allocation reached {$UNITY.LUN.USAGE.AVERAGE}%'
+                  status: DISABLED
+                  discover: NO_DISCOVER
+                  priority: AVERAGE
+                  dependencies:
+                    - name: 'LUN {#NAME}: Allocation reached {$UNITY.LUN.USAGE.HIGH}%'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.lun.space_allocated_percent[{#ID}])>{$UNITY.LUN.USAGE.HIGH}'
+                - uuid: 8b65450fc9394cc293bef94aadd0993c
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.lun.space_allocated_percent[{#ID}])>{$UNITY.LUN.USAGE.HIGH}'
+                  name: 'LUN {#NAME}: Allocation reached {$UNITY.LUN.USAGE.HIGH}%'
+                  status: DISABLED
+                  discover: NO_DISCOVER
+                  priority: HIGH
+                - uuid: 1c9abde1cd1a4693bd888aee6c17a5bc
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.lun.space_allocated_percent[{#ID}])>{$UNITY.LUN.USAGE.WARNING}'
+                  name: 'LUN {#NAME}: Allocation reached {$UNITY.LUN.USAGE.WARNING}%'
+                  status: DISABLED
+                  discover: NO_DISCOVER
+                  priority: WARNING
+                  dependencies:
+                    - name: 'LUN {#NAME}: Allocation reached {$UNITY.LUN.USAGE.AVERAGE}%'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.lun.space_allocated_percent[{#ID}])>{$UNITY.LUN.USAGE.AVERAGE}'
+                    - name: 'LUN {#NAME}: Allocation reached {$UNITY.LUN.USAGE.HIGH}%'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.lun.space_allocated_percent[{#ID}])>{$UNITY.LUN.USAGE.HIGH}'
+            - uuid: f0665e0140d149018f99a5179c25ac2c
+              name: 'LUN {#NAME}: Total Size'
+              type: DEPENDENT
+              key: 'unity.lun.space_total[{#ID}]'
+              delay: '0'
+              units: B
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.sizeTotal'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.lun.get
+              tags:
+                - tag: component
+                  value: lun
+            - uuid: 1df77821797a43bd9bcce89d6293d5f8
+              name: 'LUN {#NAME}: WWN'
+              type: DEPENDENT
+              key: 'unity.lun.wwn[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              status: DISABLED
+              discover: NO_DISCOVER
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.wwn'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.lun.get
+              tags:
+                - tag: component
+                  value: lun
+          master_item:
+            key: unity.lun.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: 92e7ce7d69a04fb1979bde860a3b2398
+          name: 'Dell Unity NAS Server Health Discovery'
+          type: DEPENDENT
+          key: unity.nasserver
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers real NAS Server resources and monitors their health and Storage Processor ownership, to detect degraded NAS servers and unplanned SP failover.'
+          item_prototypes:
+            - uuid: 03c77885530a4272a6c3714121e9d794
+              name: 'NAS Server {#NAME}: Current SP'
+              type: DEPENDENT
+              key: 'unity.nasserver.current_sp[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.currentSP.id'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nasserver.get
+              tags:
+                - tag: component
+                  value: nasserver
+            - uuid: 08778a43e60449f08379e2be5f74f92d
+              name: 'NAS Server {#NAME}: Health'
+              type: DEPENDENT
+              key: 'unity.nasserver.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nasserver.get
+              tags:
+                - tag: component
+                  value: nasserver
+              trigger_prototypes:
+                - uuid: 579a036660b54350978e5be92b33182e
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.nasserver.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.nasserver.health[{#ID}])<>7'
+                  name: 'NAS Server {#NAME}: Health status is degraded'
+                  priority: HIGH
+                - uuid: b131690539124909bf5fa7fb7b23daa0
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.nasserver.health[{#ID}])=7'
+                  name: 'NAS Server {#NAME}: Health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'NAS Server {#NAME}: Health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.nasserver.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.nasserver.health[{#ID}])<>7'
+            - uuid: 949570d289ab40c7b95e4ddc26941e5a
+              name: 'NAS Server {#NAME}: Home SP'
+              type: DEPENDENT
+              key: 'unity.nasserver.home_sp[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.homeSP.id'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nasserver.get
+              tags:
+                - tag: component
+                  value: nasserver
+          trigger_prototypes:
+            - uuid: 3da351d0a3924665ae4a94f86150ce1e
+              expression: 'last(/Dell Unity Storage by HTTP/unity.nasserver.current_sp[{#ID}])<>last(/Dell Unity Storage by HTTP/unity.nasserver.home_sp[{#ID}])'
+              name: 'NAS Server {#NAME}: Running on non-home Storage Processor (failover)'
+              priority: WARNING
+          master_item:
+            key: unity.nasserver.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: 365eb58fe6e245eeb965e70a58152be5
+          name: 'Dell Unity CIFS Server Configuration Discovery'
+          type: DEPENDENT
+          key: unity.nas_server
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers CIFS servers (SMB service configuration) on the Dell Unity array.'
+          item_prototypes:
+            - uuid: a9887221683e4cbe9d947e32e66caa9e
+              name: 'CIFS Server {#NAME} Domain'
+              type: DEPENDENT
+              key: 'unity.nas_server.domain[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.domain'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nas_server.get
+              tags:
+                - tag: component
+                  value: cifs
+            - uuid: 7b35ed8677694c89a1ada58e646282bb
+              name: 'CIFS Server {#NAME} Health'
+              type: DEPENDENT
+              key: 'unity.nas_server.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nas_server.get
+              tags:
+                - tag: component
+                  value: cifs
+              trigger_prototypes:
+                - uuid: c054da7bc9f7410eb458d34685ab46a5
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.nas_server.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.nas_server.health[{#ID}])<>7'
+                  name: 'CIFS Server {#NAME} health status is degraded'
+                  priority: HIGH
+                - uuid: 831c39c5ac5a4f07b842f1de8c160e93
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.nas_server.health[{#ID}])=7'
+                  name: 'CIFS Server {#NAME} health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'CIFS Server {#NAME} health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.nas_server.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.nas_server.health[{#ID}])<>7'
+            - uuid: c766ae75f5dc48d8a4476bcdb9ae74e2
+              name: 'CIFS Server {#NAME} ID'
+              type: DEPENDENT
+              key: 'unity.nas_server.id[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.id'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nas_server.get
+              tags:
+                - tag: component
+                  value: cifs
+            - uuid: 500c02633236404f9e00152a1bbeefae
+              name: 'CIFS Server {#NAME} Last Used Organizational Unit'
+              type: DEPENDENT
+              key: 'unity.nas_server.last_used_ou[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.lastUsedOrganizationalUnit'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nas_server.get
+              tags:
+                - tag: component
+                  value: cifs
+            - uuid: 2e88810bce4b437b89cf817b9367b8ef
+              name: 'CIFS Server {#NAME} Name'
+              type: DEPENDENT
+              key: 'unity.nas_server.name[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.name'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nas_server.get
+              tags:
+                - tag: component
+                  value: cifs
+            - uuid: efa4604c9a0b485d874809e732b1ed01
+              name: 'CIFS Server {#NAME} NAS Server Reference ID'
+              type: DEPENDENT
+              key: 'unity.nas_server.nasserver_id[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.nasServer.id'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nas_server.get
+              tags:
+                - tag: component
+                  value: cifs
+            - uuid: 5fbcba027504460e8cfdb42caf6a238a
+              name: 'CIFS Server {#NAME} NetBIOS Name'
+              type: DEPENDENT
+              key: 'unity.nas_server.netbios_name[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.netbiosName'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nas_server.get
+              tags:
+                - tag: component
+                  value: cifs
+            - uuid: 11ed5df50c1d4d0c91c7c6ed9a1419c5
+              name: 'CIFS Server {#NAME} Workgroup'
+              type: DEPENDENT
+              key: 'unity.nas_server.workgroup[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.workgroup'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.nas_server.get
+              tags:
+                - tag: component
+                  value: cifs
+          master_item:
+            key: unity.nas_server.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: 586d853d476241e1a82438794723c5cf
+          name: 'Dell Unity Storage Pool Discovery'
+          type: DEPENDENT
+          key: unity.pool
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers storage pools on the Dell Unity array. Creates items to monitor pool capacity, subscription (thin provisioning), RAID configuration, and health.'
+          item_prototypes:
+            - uuid: 552b808cfcca4babac7a579d75cf3ecc
+              name: 'Pool {#NAME} Health'
+              type: DEPENDENT
+              key: 'unity.pool.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.pool.get
+              tags:
+                - tag: component
+                  value: pool
+              trigger_prototypes:
+                - uuid: c81c077c0e2b4ea2b25418a2a7b48ea9
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.pool.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.pool.health[{#ID}])<>7'
+                  name: 'Storage pool {#NAME} health status is degraded'
+                  priority: HIGH
+                - uuid: 88cf7ac5c8364557bb8b05fa130199d6
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.pool.health[{#ID}])=7'
+                  name: 'Storage pool {#NAME} health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Storage pool {#NAME} health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.pool.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.pool.health[{#ID}])<>7'
+            - uuid: 42b3b44478f0440bbf37d106db1cc11a
+              name: 'Pool {#NAME} Raid Type'
+              type: DEPENDENT
+              key: 'unity.pool.raid_type[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Pool RAID Type'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.raidType'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.pool.get
+              tags:
+                - tag: component
+                  value: pool
+            - uuid: f829780bad184f5491b256c23184d7b5
+              name: 'Pool {#NAME} Free Size'
+              type: DEPENDENT
+              key: 'unity.pool.space_free[{#ID}]'
+              delay: '0'
+              units: B
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.sizeFree'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.pool.get
+              tags:
+                - tag: component
+                  value: pool
+            - uuid: d24a00b9fdc34cf89373646230bdb603
+              name: 'Pool {#NAME} Free Size %'
+              type: CALCULATED
+              key: 'unity.pool.space_free_percent[{#ID}]'
+              delay: 5m
+              units: '%'
+              params: '(last(//unity.pool.space_free[{#ID}]) * 100) / (last(//unity.pool.space_total[{#ID}]) + 1)'
+              tags:
+                - tag: component
+                  value: pool
+            - uuid: 7f0a77f6ff7c4f4fb5747edf8d0c6102
+              name: 'Pool {#NAME} Subscribed Size'
+              type: DEPENDENT
+              key: 'unity.pool.space_subscribed[{#ID}]'
+              delay: '0'
+              units: B
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.sizeSubscribed'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.pool.get
+              tags:
+                - tag: component
+                  value: pool
+            - uuid: 41b01df38ec2421c94b4aaabc68e0882
+              name: 'Pool {#NAME} Subscribed %'
+              type: CALCULATED
+              key: 'unity.pool.space_subscribed_percent[{#ID}]'
+              delay: 5m
+              units: '%'
+              params: '(last(//unity.pool.space_subscribed[{#ID}]) * 100) / (last(//unity.pool.space_total[{#ID}]) + 1)'
+              tags:
+                - tag: component
+                  value: pool
+              trigger_prototypes:
+                - uuid: 2aa6049e6e8549f4b34de17be7b0ba9f
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.pool.space_subscribed_percent[{#ID}])>{$UNITY.POOL.SUBSCRIPTION.HIGH}'
+                  name: 'Storage pool {#NAME}: Thin-provisioning oversubscription exceeds {$UNITY.POOL.SUBSCRIPTION.HIGH}%'
+                  priority: AVERAGE
+            - uuid: 9c9a8019473949f1900fa8ecf5123da9
+              name: 'Pool {#NAME} Total Size'
+              type: DEPENDENT
+              key: 'unity.pool.space_total[{#ID}]'
+              delay: '0'
+              units: B
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.sizeTotal'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.pool.get
+              tags:
+                - tag: component
+                  value: pool
+            - uuid: 404d9c7b3d534fa3bfda64dd79e9d85f
+              name: 'Pool {#NAME} Used Size'
+              type: DEPENDENT
+              key: 'unity.pool.space_used[{#ID}]'
+              delay: '0'
+              units: B
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.sizeUsed'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.pool.get
+              tags:
+                - tag: component
+                  value: pool
+            - uuid: 2c123b5230b64f61952d40b9c712ce50
+              name: 'Pool {#NAME} Used Size %'
+              type: CALCULATED
+              key: 'unity.pool.space_used_percent[{#ID}]'
+              delay: 5m
+              units: '%'
+              params: '(last(//unity.pool.space_used[{#ID}]) * 100) / (last(//unity.pool.space_total[{#ID}]) + 1)'
+              tags:
+                - tag: component
+                  value: pool
+              trigger_prototypes:
+                - uuid: d1d4b0fb127a47ca9e07e2d9f3ec19f9
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.pool.space_used_percent[{#ID}])>{$UNITY.POOL.USAGE.HIGH}'
+                  name: 'Storage pool {#NAME}: Space utilization is critical (> {$UNITY.POOL.USAGE.HIGH}%)'
+                  priority: HIGH
+                - uuid: 8dcab9bbb40545b79d364c552037bab9
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.pool.space_used_percent[{#ID}])>{$UNITY.POOL.USAGE.AVERAGE}'
+                  name: 'Storage pool {#NAME}: Space utilization is high (> {$UNITY.POOL.USAGE.AVERAGE}%)'
+                  priority: AVERAGE
+                  dependencies:
+                    - name: 'Storage pool {#NAME}: Space utilization is critical (> {$UNITY.POOL.USAGE.HIGH}%)'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.pool.space_used_percent[{#ID}])>{$UNITY.POOL.USAGE.HIGH}'
+                - uuid: e57cb0612bf147e5a3038186d5c61b39
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.pool.space_used_percent[{#ID}])>{$UNITY.POOL.USAGE.WARNING}'
+                  name: 'Storage pool {#NAME}: Space utilization is warning (> {$UNITY.POOL.USAGE.WARNING}%)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Storage pool {#NAME}: Space utilization is critical (> {$UNITY.POOL.USAGE.HIGH}%)'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.pool.space_used_percent[{#ID}])>{$UNITY.POOL.USAGE.HIGH}'
+                    - name: 'Storage pool {#NAME}: Space utilization is high (> {$UNITY.POOL.USAGE.AVERAGE}%)'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.pool.space_used_percent[{#ID}])>{$UNITY.POOL.USAGE.AVERAGE}'
+            - uuid: e0a1b57048334d35ab9deb462a7d8f7b
+              name: 'Pool {#NAME} Type'
+              type: DEPENDENT
+              key: 'unity.pool.type[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Pool Type'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.type'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.pool.get
+              tags:
+                - tag: component
+                  value: pool
+          master_item:
+            key: unity.pool.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: 7cccf16d56764a12b5c6e11899f3271c
+          name: 'Dell Unity Power Supply Discovery'
+          type: DEPENDENT
+          key: unity.psu
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers power supply units (PSU) in the Dell Unity storage array. Monitors PSU health and power redundancy.'
+          item_prototypes:
+            - uuid: 28dd37b4ee54455eaae00f5c7379f8a7
+              name: 'Power Supply {#NAME} EMC Part Number'
+              type: DEPENDENT
+              key: 'unity.psu.emc_part_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcPartNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.psu.get
+              tags:
+                - tag: component
+                  value: 'power supply'
+            - uuid: 0efdafba4fd940139470a8808a4bc52a
+              name: 'Power Supply {#NAME} EMC Serial Number'
+              type: DEPENDENT
+              key: 'unity.psu.emc_serial_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcSerialNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.psu.get
+              tags:
+                - tag: component
+                  value: 'power supply'
+              trigger_prototypes:
+                - uuid: 9d1e5565324e4bc9aa511e9e8df09a29
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.psu.emc_serial_number[{#ID}])=1'
+                  name: 'Power Supply {#NAME} EMC Serial Number Changed'
+                  priority: INFO
+            - uuid: a1ba1d5318a54c90b55402d6bac22350
+              name: 'Power Supply {#NAME} Firmware Version'
+              type: DEPENDENT
+              key: 'unity.psu.firmware_version[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.firmwareVersion'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.psu.get
+              tags:
+                - tag: component
+                  value: 'power supply'
+              trigger_prototypes:
+                - uuid: 29e9addf55bc4e12aa3eddbba3320047
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.psu.firmware_version[{#ID}])=1'
+                  name: 'Power Supply {#NAME} Firmware Version Changed'
+                  priority: INFO
+            - uuid: 309d5b5a3cd7414c94ba1a63f12b33d6
+              name: 'Power Supply {#NAME} Health'
+              type: DEPENDENT
+              key: 'unity.psu.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.psu.get
+              tags:
+                - tag: component
+                  value: 'power supply'
+              trigger_prototypes:
+                - uuid: 153af3916f234a3494b7a0cd00dc530c
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.psu.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.psu.health[{#ID}])<>7'
+                  name: 'Power Supply {#NAME} health status is degraded'
+                  priority: HIGH
+                - uuid: 3226a13fb607404a93e4ffb40b04fd1e
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.psu.health[{#ID}])=7'
+                  name: 'Power Supply {#NAME} health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Power Supply {#NAME} health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.psu.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.psu.health[{#ID}])<>7'
+            - uuid: 4079751720af4586b143a927ea975499
+              name: 'Power Supply {#NAME} Manufacturer'
+              type: DEPENDENT
+              key: 'unity.psu.manufacturer[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.manufacturer'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.psu.get
+              tags:
+                - tag: component
+                  value: 'power supply'
+            - uuid: ddb23ec2ee074208bb039e961ed6e9f0
+              name: 'Power Supply {#NAME} Model'
+              type: DEPENDENT
+              key: 'unity.psu.model[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.model'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.psu.get
+              tags:
+                - tag: component
+                  value: 'power supply'
+            - uuid: c8356735659b4169ab7c5320be9ce27b
+              name: 'Power Supply {#NAME} Need Replacement'
+              type: DEPENDENT
+              key: 'unity.psu.needs_replacement[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.needsReplacement'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.psu.get
+              tags:
+                - tag: component
+                  value: 'power supply'
+              trigger_prototypes:
+                - uuid: c1fc22bacab141a685a092a139f2d47e
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.psu.needs_replacement[{#ID}])="true"'
+                  name: 'Power Supply {#NAME} Replacement Needed'
+                  priority: AVERAGE
+            - uuid: 285ba6aab2d0479489b3dd33c5137a62
+              name: 'Power Supply {#NAME} Slot Number'
+              type: DEPENDENT
+              key: 'unity.psu.slot_number[{#ID}]'
+              delay: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.slotNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.psu.get
+              tags:
+                - tag: component
+                  value: 'power supply'
+            - uuid: 89f74d8297ef4285abb671a05267a87d
+              name: 'Power Supply {#NAME} Vendor Part Number'
+              type: DEPENDENT
+              key: 'unity.psu.vendor_part_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.vendorPartNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.psu.get
+              tags:
+                - tag: component
+                  value: 'power supply'
+            - uuid: 265bd3fd5ce0448a959532b981068f30
+              name: 'Power Supply {#NAME} Vendor Serial Number'
+              type: DEPENDENT
+              key: 'unity.psu.vendor_serial_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.vendorSerialNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.psu.get
+              tags:
+                - tag: component
+                  value: 'power supply'
+          master_item:
+            key: unity.psu.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: bc925b182ed5442f821fa8a6f344b24f
+          name: 'Dell Unity Replication Session Discovery'
+          type: DEPENDENT
+          key: unity.replication
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers replication sessions and monitors health and out-of-sync time. Produces no items on systems without replication configured.'
+          item_prototypes:
+            - uuid: fe8b29d66c5f4abe8112a78ebdab26bb
+              name: 'Replication Session {#NAME}: Health'
+              type: DEPENDENT
+              key: 'unity.replication.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.replication.get
+              tags:
+                - tag: component
+                  value: replication
+              trigger_prototypes:
+                - uuid: 2540975d53f74fb3a40f3c6605fd420c
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.replication.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.replication.health[{#ID}])<>7'
+                  name: 'Replication Session {#NAME}: Health status is degraded'
+                  priority: HIGH
+                - uuid: 97e5d4dc97264ae49a065c6c574662b4
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.replication.health[{#ID}])=7'
+                  name: 'Replication Session {#NAME}: Health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Replication Session {#NAME}: Health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.replication.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.replication.health[{#ID}])<>7'
+            - uuid: d30fe508f5d64a08be32cf7792aa6c6b
+              name: 'Replication Session {#NAME}: Max Time Out Of Sync'
+              type: DEPENDENT
+              key: 'unity.replication.max_time_out_of_sync[{#ID}]'
+              delay: '0'
+              units: s
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.maxTimeOutOfSync'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.replication.get
+              tags:
+                - tag: component
+                  value: replication
+              trigger_prototypes:
+                - uuid: 720aa12132eb40e983bce1a3df8c1385
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.replication.max_time_out_of_sync[{#ID}])>{$UNITY.REPLICATION.MAX_LAG}'
+                  name: 'Replication Session {#NAME}: Out-of-sync time exceeds {$UNITY.REPLICATION.MAX_LAG}s'
+                  priority: AVERAGE
+          master_item:
+            key: unity.replication.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+        - uuid: 5056c7012d56491ab8d7c917c487d3be
+          name: 'Dell Unity Storage Processor Discovery'
+          type: DEPENDENT
+          key: unity.sp
+          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers storage processors (SP) in the Dell Unity array. Monitors processor health, firmware versions, and redundancy.'
+          item_prototypes:
+            - uuid: 7741ea5463904220a02034b763a3f65c
+              name: 'Storage Processor {#NAME} Bios Firmware Revision'
+              type: DEPENDENT
+              key: 'unity.sp.bios_firmware_version[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.biosFirmwareRevision'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.sp.get
+              tags:
+                - tag: component
+                  value: 'storage processor'
+              trigger_prototypes:
+                - uuid: dfb1f1d5023a4c0bb10a1983d74175e0
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.sp.bios_firmware_version[{#ID}])=1'
+                  name: 'Storage Processor {#NAME} Bios Firmware Version Changed'
+                  priority: INFO
+            - uuid: 37fa21807dc24e1c9936776c4130f78d
+              name: 'Storage Processor {#NAME} EMC Part Number'
+              type: DEPENDENT
+              key: 'unity.sp.emc_part_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcPartNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.sp.get
+              tags:
+                - tag: component
+                  value: 'storage processor'
+            - uuid: d0337354db7c43828c4c203f891fa298
+              name: 'Storage Processor {#NAME} EMC Serial Number'
+              type: DEPENDENT
+              key: 'unity.sp.emc_serial_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.emcSerialNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.sp.get
+              tags:
+                - tag: component
+                  value: 'storage processor'
+              trigger_prototypes:
+                - uuid: f7ac8d7303ad4e8c9b410c55a2486d52
+                  expression: 'change(/Dell Unity Storage by HTTP/unity.sp.emc_serial_number[{#ID}])=1'
+                  name: 'Storage Processor {#NAME} EMC Serial Number Changed'
+                  priority: INFO
+            - uuid: 92cde12288824d1fb4186409c2b561d1
+              name: 'Storage Processor {#NAME} Health'
+              type: DEPENDENT
+              key: 'unity.sp.health[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Component Health Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.health.value'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.sp.get
+              tags:
+                - tag: component
+                  value: 'storage processor'
+              trigger_prototypes:
+                - uuid: 59011c0af1c7479fb26a8b81ca0bd8e6
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.sp.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.sp.health[{#ID}])<>7'
+                  name: 'Storage Processor {#NAME} health status is degraded'
+                  priority: HIGH
+                - uuid: 4947f1c65ec64564810939c79c55b77a
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.sp.health[{#ID}])=7'
+                  name: 'Storage Processor {#NAME} health status is OK with a minor condition (OK_BUT)'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Storage Processor {#NAME} health status is degraded'
+                      expression: 'last(/Dell Unity Storage by HTTP/unity.sp.health[{#ID}])<>5 and last(/Dell Unity Storage by HTTP/unity.sp.health[{#ID}])<>7'
+            - uuid: 4c08951e5955428a8a35920689a1d895
+              name: 'Storage Processor {#NAME} Manufacturer'
+              type: DEPENDENT
+              key: 'unity.sp.manufacturer[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.manufacturer'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.sp.get
+              tags:
+                - tag: component
+                  value: 'storage processor'
+            - uuid: 3a2b977c938b4e8c8491b33a1fad1e20
+              name: 'Storage Processor {#NAME} Memory Size'
+              type: DEPENDENT
+              key: 'unity.sp.memory_size[{#ID}]'
+              delay: '0'
+              units: MB
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.memorySize'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.sp.get
+              tags:
+                - tag: component
+                  value: 'storage processor'
+            - uuid: 881703d76f944b51974706761c2c46fb
+              name: 'Storage Processor {#NAME} Model'
+              type: DEPENDENT
+              key: 'unity.sp.model[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.model'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.sp.get
+              tags:
+                - tag: component
+                  value: 'storage processor'
+            - uuid: dd43970a4fa9483fba19c84c69eda0a0
+              name: 'Storage Processor {#NAME} Model Name'
+              type: DEPENDENT
+              key: 'unity.sp.model_name[{#ID}]'
+              delay: '0'
+              valuemap:
+                name: 'Dell Unity Storage Processor Model'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.modelName'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.sp.get
+              tags:
+                - tag: component
+                  value: 'storage processor'
+            - uuid: a3fd029664dc4178876f90b3f54d2fd2
+              name: 'Storage Processor {#NAME} Need Replacement'
+              type: DEPENDENT
+              key: 'unity.sp.needs_replacement[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.needsReplacement'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.sp.get
+              tags:
+                - tag: component
+                  value: 'storage processor'
+              trigger_prototypes:
+                - uuid: 81645e9e9d884a94b9f8af549f6dc114
+                  expression: 'last(/Dell Unity Storage by HTTP/unity.sp.needs_replacement[{#ID}])="true"'
+                  name: 'Storage Processor {#NAME} Replacement Needed'
+                  priority: AVERAGE
+            - uuid: b54add0904554b4189a838d0f06affe1
+              name: 'Storage Processor {#NAME} Vendor Part Number'
+              type: DEPENDENT
+              key: 'unity.sp.vendor_part_number[{#ID}]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.entries[?(@.content.id == ''{#ID}'')].content.vendorPartNumber'
+                - type: JSONPATH
+                  parameters:
+                    - '$[0]'
+              master_item:
+                key: unity.sp.get
+              tags:
+                - tag: component
+                  value: 'storage processor'
+          master_item:
+            key: unity.sp.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.content.id
+            - lld_macro: '{#NAME}'
+              path: $.content.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.entries
+      tags:
+        - tag: class
+          value: storage
+        - tag: target
+          value: dell-unity
+      macros:
+        - macro: '{$DELL_UNITY.HOSTNAME}'
+          description: 'Dell Unity appliance hostname or IP address'
+        - macro: '{$DELL_UNITY.PASSWORD}'
+          description: 'Password for user account with Operator or higher privileges'
+        - macro: '{$DELL_UNITY.USERNAME}'
+          description: 'Username with Operator or higher privileges'
+        - macro: '{$UNITY.ALERT.SEVERITY.MAX}'
+          value: '3'
+          description: 'Alerts with severity <= this value raise a problem (syslog-style scale: 0=Emergency ... 7=Debug, lower = more severe). Default 3 = Error and above.'
+        - macro: '{$UNITY.DISK.EOL.WARNING}'
+          value: '4380'
+          description: 'Disk estimated end-of-life warning threshold in hours (default ~6 months)'
+        - macro: '{$UNITY.FILESYSTEM.USAGE.AVERAGE}'
+          value: '80'
+          description: 'Filesystem space utilization average alert threshold (%)'
+        - macro: '{$UNITY.FILESYSTEM.USAGE.HIGH}'
+          value: '90'
+          description: 'Filesystem space utilization critical alert threshold (%)'
+        - macro: '{$UNITY.FILESYSTEM.USAGE.WARNING}'
+          value: '70'
+          description: 'Filesystem space utilization warning threshold (%)'
+        - macro: '{$UNITY.LUN.USAGE.AVERAGE}'
+          value: '80'
+          description: 'LUN thin-provisioning allocation average alert threshold (%)'
+        - macro: '{$UNITY.LUN.USAGE.HIGH}'
+          value: '90'
+          description: 'LUN thin-provisioning allocation critical alert threshold (%)'
+        - macro: '{$UNITY.LUN.USAGE.WARNING}'
+          value: '70'
+          description: 'LUN thin-provisioning allocation warning threshold (%)'
+        - macro: '{$UNITY.PERF.QUERY.INTERVAL}'
+          value: '30'
+          description: 'Sampling interval in seconds for the real-time performance metric query created on the array by unity.perf.get'
+        - macro: '{$UNITY.POOL.SUBSCRIPTION.HIGH}'
+          value: '300'
+          description: 'Storage pool / system-wide thin-provisioning oversubscription warning threshold (%)'
+        - macro: '{$UNITY.POOL.USAGE.AVERAGE}'
+          value: '80'
+          description: 'Storage pool space utilization average alert threshold (%)'
+        - macro: '{$UNITY.POOL.USAGE.HIGH}'
+          value: '90'
+          description: 'Storage pool space utilization critical alert threshold (%)'
+        - macro: '{$UNITY.POOL.USAGE.WARNING}'
+          value: '70'
+          description: 'Storage pool space utilization warning threshold (%)'
+        - macro: '{$UNITY.REPLICATION.MAX_LAG}'
+          value: '3600'
+          description: 'Maximum acceptable replication out-of-sync time in seconds before alerting'
+        - macro: '{$UNITY.SP.CPU.AVERAGE}'
+          value: '80'
+          description: 'Storage Processor CPU utilization high alert threshold (%)'
+        - macro: '{$UNITY.SP.CPU.HIGH}'
+          value: '90'
+          description: 'Storage Processor CPU utilization critical alert threshold (%)'
+        - macro: '{$UNITY.STORAGE.LATENCY.AVERAGE}'
+          value: '10'
+          description: 'Storage average response time high alert threshold (ms)'
+        - macro: '{$UNITY.STORAGE.LATENCY.HIGH}'
+          value: '20'
+          description: 'Storage average response time critical alert threshold (ms)'
+        - macro: '{$UNITY.SYSTEM.CAPACITY.AVERAGE}'
+          value: '80'
+          description: 'System-wide capacity utilization high alert threshold (%)'
+        - macro: '{$UNITY.SYSTEM.CAPACITY.HIGH}'
+          value: '90'
+          description: 'System-wide capacity utilization critical alert threshold (%)'
+        - macro: '{$UNITY.SYSTEM.CAPACITY.WARNING}'
+          value: '70'
+          description: 'System-wide capacity utilization warning threshold (%)'
+      valuemaps:
+        - uuid: d824cf7eaecd449a8f79e8f4f7a4cc6d
+          name: 'Alert Severity'
+          mappings:
+            - value: '0'
+              newvalue: Emergency
+            - value: '1'
+              newvalue: Alert
+            - value: '2'
+              newvalue: Critical
+            - value: '3'
+              newvalue: Error
+            - value: '4'
+              newvalue: Warning
+            - value: '5'
+              newvalue: Notice
+            - value: '6'
+              newvalue: Info
+            - value: '7'
+              newvalue: Debug
+        - uuid: d67490bd20a1458494b7af92d2ec5c90
+          name: 'CIFS Share Type'
+          mappings:
+            - value: '1'
+              newvalue: Cifs_Share
+            - value: '2'
+              newvalue: Cifs_Snapshot
+        - uuid: a46ef9272f494c62b8ee71abd784b4a4
+          name: 'Component Health Status'
+          mappings:
+            - value: '0'
+              newvalue: UNKNOWN
+            - value: '5'
+              newvalue: OK
+            - value: '7'
+              newvalue: OK_BUT
+            - value: '10'
+              newvalue: DEGRADED
+            - value: '15'
+              newvalue: MINOR
+            - value: '20'
+              newvalue: MAJOR
+            - value: '25'
+              newvalue: CRITICAL
+            - value: '30'
+              newvalue: NON_RECOVERABLE
+        - uuid: 557db36c42b24378a09e151b6eccaf91
+          name: 'Dell Unity Storage Processor Model'
+          mappings:
+            - value: '1'
+              newvalue: SP300
+            - value: '2'
+              newvalue: SP400
+            - value: '3'
+              newvalue: SP500
+            - value: '4'
+              newvalue: SP600
+            - value: '5'
+              newvalue: SP350
+            - value: '6'
+              newvalue: SP450
+            - value: '7'
+              newvalue: SP550
+            - value: '8'
+              newvalue: SP650
+            - value: '9'
+              newvalue: VSA2Core
+            - value: '10'
+              newvalue: VSA12Core
+            - value: '11'
+              newvalue: SP380
+            - value: '12'
+              newvalue: SP480
+            - value: '13'
+              newvalue: SP680
+            - value: '14'
+              newvalue: SP880
+        - uuid: bca4c8921ba94e7b912b56aec38aa9fc
+          name: 'Filesystem Storage Format'
+          mappings:
+            - value: '0'
+              newvalue: UFS32
+            - value: '2'
+              newvalue: UFS64
+        - uuid: b3bdb15f29394dd8b49235933a1d3d8a
+          name: 'Filesystem Type'
+          mappings:
+            - value: '1'
+              newvalue: FileSystem
+            - value: '2'
+              newvalue: VMware
+        - uuid: d1561644100f4d3cb7c122610a1b4b8d
+          name: 'Pool RAID Type'
+          mappings:
+            - value: '0'
+              newvalue: None
+            - value: '1'
+              newvalue: RAID5
+            - value: '2'
+              newvalue: RAID0
+            - value: '3'
+              newvalue: RAID1
+            - value: '4'
+              newvalue: RAID3
+            - value: '7'
+              newvalue: RAID10
+            - value: '10'
+              newvalue: RAID6
+            - value: '12'
+              newvalue: Mixed
+        - uuid: 399a7deebc1f4fb8a53dfdb738e943ca
+          name: 'Pool Type'
+          mappings:
+            - value: '1'
+              newvalue: Traditional
+            - value: '2'
+              newvalue: Dynamic
+  triggers:
+    - uuid: d111e8fa1a614107a3a31029c4cca56f
+      expression: |
+        length(last(/Dell Unity Storage by HTTP/unity.alert.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.system.info.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.system.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.systemcapacity.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.sp.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.psu.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.pool.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.replication.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.fcport.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.dae.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.dpe.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.lun.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.nasserver.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.nas_server.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.interfaces.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.filesystem.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.fan.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.disk.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.cifs_share.get))>0
+        or length(last(/Dell Unity Storage by HTTP/unity.battery.get))>0
+      name: 'Dell Unity: Failed to get data from API'
+      status: DISABLED
+      priority: HIGH
